@@ -1,6 +1,6 @@
 import { chromium } from '@playwright/test';
 import { writeFileSync, mkdirSync } from 'node:fs';
-const map = process.argv[2] ?? 'nexus',
+const map = process.argv[2] ?? 'depot',
   output = process.argv[3] ?? 'docs/benchmarks/fps-visual.json';
 const browser = await chromium.launch({ headless: true });
 try {
@@ -74,7 +74,13 @@ try {
   await page.getByRole('button', { name: 'Entra nell’arena' }).click();
   await page.waitForTimeout(1500);
   await page.evaluate(() => window.startSample());
-  await page.waitForTimeout(6000);
+  await page.keyboard.down('KeyW');
+  await page.waitForTimeout(2000);
+  await page.keyboard.up('KeyW');
+  await page.keyboard.down('KeyD');
+  await page.waitForTimeout(1000);
+  await page.keyboard.up('KeyD');
+  await page.waitForTimeout(3000);
   const sample = await page.evaluate(() => window.readSample());
   sample.dt.sort((a, b) => a - b);
   const result = {
@@ -82,6 +88,16 @@ try {
     driver: 'Chromium headless / software WebGL',
     viewport: [1440, 960],
     bots: 5,
+    movement: 'W for 2s, D for 1s, idle for 3s',
+    buffer: await page.locator('.fps-canvas canvas').evaluate((canvas) => {
+      const rect = canvas.getBoundingClientRect();
+      return {
+        width: canvas.width,
+        height: canvas.height,
+        cssWidth: rect.width,
+        cssHeight: rect.height,
+      };
+    }),
     frames: sample.frames,
     p50Ms: sample.dt[Math.floor(sample.frames * 0.5)],
     p95Ms: sample.dt[Math.floor(sample.frames * 0.95)],

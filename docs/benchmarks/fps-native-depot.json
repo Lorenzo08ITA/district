@@ -1,0 +1,21 @@
+{
+  "map": "depot",
+  "driver": "Chromium headless / software WebGL",
+  "viewport": [
+    1440,
+    960
+  ],
+  "bots": 5,
+  "movement": "W for 2s, D for 1s, idle for 3s",
+  "buffer": {
+    "width": 1136,
+    "height": 560,
+    "cssWidth": 1136,
+    "cssHeight": 560
+  },
+  "frames": 177,
+  "p50Ms": 33.30000000000018,
+  "p95Ms": 50,
+  "meanDrawCalls": 123,
+  "note": "Synthetic local capture; not a hardware GPU or internet-latency guarantee."
+}

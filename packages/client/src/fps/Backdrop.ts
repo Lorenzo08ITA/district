@@ -2,7 +2,10 @@ import * as THREE from 'three';
 import type { SurfaceLibrary } from './Surfaces.js';
 import type { ArenaName } from '@district/rts-shared/fps';
 const vertex = `varying vec3 direction;void main(){direction=position;vec4 p=projectionMatrix*modelViewMatrix*vec4(position,1.);gl_Position=p.xyww;}`;
-const fragment = `precision highp float;uniform sampler2D cloudNoise;varying vec3 direction;uniform float time;uniform float detail;uniform vec3 sun;uniform vec3 horizon;uniform vec3 zenith;float noise(vec2 p){return texture2D(cloudNoise,p/128.).r;}void main(){vec3 d=normalize(direction);float altitude=max(0.,d.y);vec3 color=mix(horizon,zenith,pow(altitude,.45));float s=max(0.,dot(d,sun));color+=vec3(1.,.63,.3)*pow(s,24.)*.45+vec3(4.,2.8,1.5)*smoothstep(.9995,.99985,s);vec2 p=d.xz/max(.16,d.y+.18)*2.4+vec2(time*.003,0.);float cloud=0.,amp=.55;for(int i=0;i<4;i++){if(float(i)>=detail)break;cloud+=noise(p)*amp;p=p*2.07+7.1;amp*=.5;}float cover=smoothstep(.4,.67,cloud)*(1.-smoothstep(.0,.08,-d.y));vec3 lit=mix(vec3(.33,.39,.46),vec3(1.1,.98,.8),smoothstep(.45,.8,cloud));color=mix(color,lit,cover*.85);color=mix(color,horizon,smoothstep(.1,-.2,d.y)*.55);gl_FragColor=vec4(color,1.);}`;
+const fragment = `precision highp float;uniform sampler2D cloudNoise;varying vec3 direction;uniform float time;uniform float detail;uniform vec3 sun;uniform vec3 horizon;uniform vec3 zenith;float noise(vec2 p){return texture2D(cloudNoise,p/128.).r;}void main(){vec3 d=normalize(direction);float altitude=max(0.,d.y);vec3 color=mix(horizon,zenith,pow(altitude,.45));float s=max(0.,dot(d,sun));color+=vec3(1.,.63,.3)*pow(s,24.)*.45+vec3(4.,2.8,1.5)*smoothstep(.9995,.99985,s);vec2 p=d.xz/max(.16,d.y+.18)*2.4+vec2(time*.003,0.);float cloud=0.,amp=.55;for(int i=0;i<4;i++){if(float(i)>=detail)break;cloud+=noise(p)*amp;p=p*2.07+7.1;amp*=.5;}float cover=smoothstep(.4,.67,cloud)*(1.-smoothstep(.0,.08,-d.y));vec3 lit=mix(vec3(.33,.39,.46),vec3(1.1,.98,.8),smoothstep(.45,.8,cloud));color=mix(color,lit,cover*.85);color=mix(color,horizon,smoothstep(.1,-.2,d.y)*.55);gl_FragColor=vec4(color,1.);
+#include <tonemapping_fragment>
+#include <colorspace_fragment>
+}`;
 export class WorldBackdrop {
   readonly root = new THREE.Group();
   private sky: THREE.Mesh;
@@ -40,7 +43,7 @@ export class WorldBackdrop {
       uniforms: {
         cloudNoise: { value: this.cloudNoise },
         time: { value: 0 },
-        detail: { value: software ? 2 : 4 },
+        detail: { value: software ? 0 : 4 },
         sun: { value: this.sun },
         horizon: { value: this.fog },
         zenith: { value: new THREE.Color(coast ? 0x426e91 : desert ? 0x527d96 : 0x305a86) },
@@ -111,11 +114,7 @@ export class WorldBackdrop {
     mountain.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
     mountain.setIndex(indices);
     mountain.computeVertexNormals();
-    const mountainMaterial = surfaces.material('stone', 0xd6dad6, 0, 1);
-    if (software) {
-      mountainMaterial.normalMap = null;
-      mountainMaterial.roughnessMap = null;
-    }
+    const mountainMaterial = new THREE.MeshLambertMaterial({ color: 0xd6dad6 });
     mountainMaterial.vertexColors = true;
     mountainMaterial.side = THREE.DoubleSide;
     this.root.add(new THREE.Mesh(mountain, mountainMaterial));
@@ -128,9 +127,15 @@ export class WorldBackdrop {
         },
         vertexShader:
           'varying vec3 p;void main(){p=(modelMatrix*vec4(position,1.)).xyz;gl_Position=projectionMatrix*viewMatrix*vec4(p,1.);}',
-        fragmentShader: `precision highp float;varying vec3 p;uniform float time;uniform vec3 sun;uniform vec3 eye;void main(){float a=sin(p.x*.18+time*.45),b=cos(p.z*.13+time*.37);vec3 n=normalize(vec3(a*.06,1.,b*.05));vec3 v=normalize(eye-p);float f=pow(1.-max(0.,dot(n,v)),3.);float shine=pow(max(0.,dot(reflect(-sun,n),v)),100.);vec3 color=mix(vec3(.035,.18,.22),vec3(.32,.49,.54),f);color+=vec3(1.3,.85,.4)*shine;gl_FragColor=vec4(color,1.);}`,
+        fragmentShader: `precision highp float;varying vec3 p;uniform float time;uniform vec3 sun;uniform vec3 eye;void main(){float a=sin(p.x*.18+time*.45),b=cos(p.z*.13+time*.37);vec3 n=normalize(vec3(a*.06,1.,b*.05));vec3 v=normalize(eye-p);float f=pow(1.-max(0.,dot(n,v)),3.);float shine=pow(max(0.,dot(reflect(-sun,n),v)),100.);vec3 color=mix(vec3(.035,.18,.22),vec3(.32,.49,.54),f);color+=vec3(1.3,.85,.4)*shine;gl_FragColor=vec4(color,1.);
+#include <tonemapping_fragment>
+#include <colorspace_fragment>
+}`,
       });
-      const sea = new THREE.Mesh(new THREE.PlaneGeometry(1200, 1200), this.water);
+      const sea = new THREE.Mesh(
+        new THREE.PlaneGeometry(1200, 1200),
+        software ? new THREE.MeshBasicMaterial({ color: 0x709eae }) : this.water,
+      );
       sea.rotation.x = -Math.PI / 2;
       sea.position.y = -4;
       this.root.add(sea);
@@ -231,6 +236,7 @@ export class WorldBackdrop {
     }
   }
   dispose(): void {
+    this.water?.dispose();
     this.leafTexture?.dispose();
     this.cloudNoise.dispose();
   }

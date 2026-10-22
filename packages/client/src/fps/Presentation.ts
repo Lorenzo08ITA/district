@@ -1,10 +1,11 @@
 import { clamp } from '@district/rts-shared/fps';
-/** One simulation step of interpolation; aim is sampled separately to avoid mouse latency. */
+/** Timestamped interpolation tolerates worker delivery jitter without delaying mouse aim. */
 export class PosePresentation {
   private previous = new Float64Array(24);
   readonly current = new Float64Array(24);
   readonly values = new Float64Array(24);
   private received = 0;
+  private previousTime = 0;
   private initialized = false;
   push(value: Float64Array, time: number): boolean {
     const teleport =
@@ -15,6 +16,8 @@ export class PosePresentation {
         value[3]! - this.current[3]!,
       ) > 3 ||
       value[10]! > 0 !== this.current[10]! > 0;
+    if (this.initialized && time <= this.received) return false;
+    this.previousTime = teleport ? time - 1000 / 60 : this.received;
     this.previous.set(teleport ? value : this.current);
     this.current.set(value);
     this.received = time;
@@ -23,7 +26,11 @@ export class PosePresentation {
   }
   sample(time: number): Float64Array {
     this.values.set(this.current);
-    const t = clamp((time - this.received) / (1000 / 60), 0, 1);
+    const t = clamp(
+      (time - 1000 / 60 - this.previousTime) / (this.received - this.previousTime),
+      0,
+      1,
+    );
     for (let i = 1; i <= 3; i++)
       this.values[i] = this.previous[i]! + (this.current[i]! - this.previous[i]!) * t;
     this.values[7] = this.previous[7]! + (this.current[7]! - this.previous[7]!) * t;

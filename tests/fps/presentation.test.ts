@@ -26,15 +26,16 @@ describe('FPS tactical arenas', () => {
         expect(arena.surfaces[n + 5]).toBeGreaterThan(arena.surfaces[n + 2]!);
       }
     });
-  for (const name of ['bastion', 'cedar'] as const)
+  for (const name of ['depot', 'bastion', 'cedar'] as const)
     it(name + ': traversable three-lane route between flag bases', () => {
       const arena = createArena(name),
         controller = new KinematicController(arena.world, arena.pads),
         input = new PlayerInput();
       controller.reset(0, 0.05, 27);
+      const lane = name === 'depot' ? 12 : 8;
       for (const [x, z] of [
-        [8, 27],
-        [8, -27],
+        [lane, 27],
+        [lane, -27],
         [0, -27],
       ]) {
         let ticks = 0;
@@ -63,9 +64,9 @@ describe('FPS presentation', () => {
     a[1] = 1;
     a[8] = 0.7;
     a[12] = 20;
-    p.push(a, 200);
-    expect(p.sample(200)[1]).toBe(0);
-    expect(p.sample(200 + 1000 / 120)[1]).toBeCloseTo(0.5);
+    p.push(a, 100 + 1000 / 60);
+    expect(p.sample(100 + 1000 / 60)[1]).toBeCloseTo(0);
+    expect(p.sample(100 + 1000 / 60 + 1000 / 120)[1]).toBeCloseTo(0.5);
     expect(p.sample(250)[1]).toBe(1);
     expect(p.sample(210)[8]).toBe(0.7);
     expect(p.sample(210)[12]).toBe(20);
@@ -83,14 +84,15 @@ describe('FPS presentation', () => {
     expect(p.push(a, 3)).toBe(true);
     expect(p.sample(3)[1]).toBe(39);
   });
-  it('reduces resolution under sustained load, ignores suspended tabs, and recovers slowly', () => {
-    const p = new RenderBudget(0.55, 1.5, 1.25);
+  it('reduces only supersampling under load, ignores suspended tabs, and recovers slowly', () => {
+    const p = new RenderBudget(1, 1.5, 1.25);
     let time = 1;
     for (let n = 0; n < 100; n++) {
       time += 33;
       p.sample(33, time);
     }
     expect(p.scale).toBeLessThan(1.25);
+    expect(p.scale).toBeGreaterThanOrEqual(1);
     const scale = p.scale;
     for (let n = 0; n < 30; n++) {
       time += 1000;
@@ -103,6 +105,24 @@ describe('FPS presentation', () => {
     }
     expect(p.scale).toBeGreaterThan(scale);
     expect(p.scale).toBeLessThanOrEqual(1.5);
+  });
+  it('uses simulation timestamps across coalesced frames and ignores stale delivery', () => {
+    const p = new PosePresentation(),
+      a = new Float64Array(24);
+    a[10] = 100;
+    p.push(a, 100);
+    a[1] = 0.4;
+    p.push(a, 150);
+    expect(p.sample(150)[1]).toBeCloseTo((0.4 * 2) / 3);
+    expect(p.sample(150 + 1000 / 60)[1]).toBeCloseTo(0.4);
+    a[1] = 0.2;
+    p.push(a, 120);
+    expect(p.sample(200)[1]).toBeCloseTo(0.4);
+  });
+  it('never scales a native-resolution budget below one pixel per CSS pixel', () => {
+    const p = new RenderBudget(1, 1, 1);
+    for (let n = 1; n < 500; n++) p.sample(50, n * 50);
+    expect(p.scale).toBe(1);
   });
   it('batches static material siblings while retaining animated pivots and bounds', () => {
     const root = new THREE.Group(),
@@ -147,7 +167,41 @@ describe('FPS presentation', () => {
     }
     factory.surfaces.dispose();
   });
-  it('builds all textured weapons and four detailed arenas within a static draw budget', () => {
+  it('tiles architectural surfaces in world units instead of stretching tiny textures', () => {
+    const factory = new ProceduralWeaponFactory(),
+      root = factory.buildArena(createArena('depot'));
+    const floor = root.children.find(
+      (o) =>
+        o instanceof THREE.Mesh &&
+        o.material instanceof THREE.MeshLambertMaterial &&
+        o.material.color.getHex() === 0x737b80,
+    ) as THREE.Mesh;
+    expect(floor).toBeDefined();
+    const uv = floor.geometry.getAttribute('uv');
+    let min = Infinity,
+      max = -Infinity;
+    for (let i = 0; i < uv.count; i++) {
+      min = Math.min(min, uv.getX(i));
+      max = Math.max(max, uv.getX(i));
+    }
+    expect(max - min).toBeCloseTo(21.5);
+    factory.surfaces.dispose();
+  });
+  it('batches character palettes without losing animated limbs or team armor', () => {
+    const factory = new ProceduralWeaponFactory(),
+      rig = factory.createCharacter(0);
+    let draws = 0;
+    rig.root.traverse((o) => {
+      if (o instanceof THREE.Mesh) draws++;
+    });
+    expect(draws).toBeLessThan(28);
+    expect(rig.root.children).toContain(rig.leftLeg);
+    expect(rig.leftLeg.children.length).toBeGreaterThan(0);
+    rig.armor.color.setHex(0x82715c);
+    expect(rig.armor.color.getHex()).toBe(0x82715c);
+    factory.surfaces.dispose();
+  });
+  it('builds all textured weapons and all arenas within a static draw budget', () => {
     const factory = new ProceduralWeaponFactory();
     for (let id = 0; id < 6; id++) {
       const gun = factory.create(id);

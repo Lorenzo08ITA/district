@@ -1,58 +1,55 @@
-# Crossfire — modelli, mappe e fluidità
+# Crossfire — nitidezza, movimento e mappe
 
-## Contenuti
+## Riferimento e contenuti
 
-Quattro mappe selezionabili nello stesso servizio autoritativo:
+È stato aperto e osservato [Deadshot.io](https://deadshot.io/), compresi menu, selezione della classe e partita. Il riferimento guida la leggibilità delle corsie industriali, la visuale in prima persona e l'HUD essenziale. Crossfire mantiene codice, regole e modelli propri: non è una replica completa del prodotto e non contiene asset estratti dal sito.
 
-- **Bastione:** edifici mediterranei, finestre e passaggi attraversabili, mercato, passerella e rampe; costa, mare animato e rilievi sullo sfondo. La disposizione favorisce incroci fra corsie e controllo degli angoli.
-- **Cedar:** due case su due livelli, balconi accessibili, coperture centrali con autobus e veicolo, giardini e alberi. Il quartiere compatto favorisce scontri rapidi e cambi di quota.
-- **Nexus:** laboratorio con passerelle, rampe, jump-pad e panorama alpino.
-- **Sandstorm:** avamposto industriale con tunnel, container e paesaggio desertico.
+Cinque mappe usano gli stessi solidi e rampe nel renderer e nella simulazione autoritativa:
 
-Le nuove mappe sono originali e richiamano il ritmo tattico dei riferimenti indicati; non usano asset estratti da altri giochi. Solidi, rampe, ingressi, spawn e obiettivi vengono definiti in `packages/shared/src/fps/arena.ts` e condivisi fra client e server. Il panorama esterno è scenografico; i limiti dell'arena restano quelli della simulazione.
+- **Depot**, predefinita: magazzini attraversabili, soppalchi, passerella, casse e container centrali, corsie laterali e segnaletica.
+- **Bastione**: edifici mediterranei su due livelli, mercato e costa.
+- **Cedar**: quartiere con case, balconi, veicoli e giardini.
+- **Nexus**: laboratorio con passerelle e jump-pad.
+- **Sandstorm**: avamposto industriale con tunnel.
 
-## Modelli e materiali
+Pavimenti e pareti ripetono le texture ogni quattro metri, evitando di allargare 128 texel sull’intera mappa. Le strutture architettoniche hanno spigoli regolari; le sagome sagomate rimangono sulle armi e sugli accessori. Gli operatori conservano arti articolati e armature colorate per squadra. Le palette del corpo vengono consolidate con colori per vertice, riducendo i materiali e le chiamate di disegno senza eliminare le animazioni.
 
-Le armi hanno ricevitori dal profilo sagomato, canne più proporzionate, astine e prese d'aria, dettagli meccanici, ottiche e accessori differenziati. Caricatore, otturatore e tamburo mantengono i pivot delle animazioni. Operatori con elmetto, protezione facciale, collo, giubbotto con tasche, spallacci, ginocchiere e scarponi; braccia in prima persona con guanti e dita.
+## Correzione della pixelatura
 
-I materiali PBR usano piccole texture procedurali deterministiche per colore, rugosità e normali: metallo lavorato, polimero, tessuto, intonaco, legno, mattoni, asfalto e coperture. Non vengono scaricati modelli o texture durante la partita. Restano modelli procedurali: il progetto non viene presentato come fotogrammetria o produzione cinematografica.
+Il vecchio percorso disegnava la scena in un render target HDR senza MSAA, arrivava al 55–65% della dimensione CSS e ingrandiva il risultato. L'antialiasing del canvas finale non poteva correggere i bordi già rasterizzati nella texture.
 
-Il cielo usa uno shader con gradiente atmosferico, disco solare, foschia e nuvole animate. Il rumore viene precalcolato in una texture, evitando numerose funzioni trigonometriche per pixel. Il mare usa normali animate e riflessi speculari; il terreno distante usa rumore coerente multiscala. La vegetazione è istanziata con chiome ritagliate tramite alpha test. Il percorso hardware mantiene illuminazione ambientale PMREM e ombre; quello software riduce il dettaglio distante e il costo degli effetti.
+Il nuovo percorso disegna direttamente sul framebuffer del canvas. Non usa il passaggio HDR, il bloom a otto campioni o l'ingrandimento di un'immagine sottocampionata. La risoluzione minima è **un pixel interno per pixel CSS**, anche in modalità Fluidità. Su GPU hardware è attivo il MSAA del contesto. Il renderer software conserva la risoluzione nativa e disabilita il MSAA: può mostrare bordi seghettati, ma evita il costo della rasterizzazione multisample sulla CPU.
 
-## Fluidità
+La modalità automatica può ridurre soltanto l'eventuale supersampling su schermi ad alta densità; non scende sotto la risoluzione CSS. Qualità alta abilita ombre statiche e fino a 1,5 pixel per pixel CSS. Il menu include lo schermo intero. F3 mostra FPS, intervallo del fotogramma, draw call e scala effettiva.
 
-- Le mesh statiche con lo stesso materiale vengono unite, conservando separati gruppi e pivot animati. Questo riduce il numero di chiamate di disegno senza alterare la geometria fisica.
-- La posa della camera viene interpolata fra gli ultimi due stati simulati. La mira usa il campione corrente e gli spostamenti del mouse non ancora confermati dal Worker, evitando di aggiungere un tick di ritardo al mouse.
-- Respawn e teletrasporti non vengono interpolati attraverso la mappa; anche le discontinuità degli attori remoti vengono riconosciute.
-- La qualità automatica adatta lentamente la risoluzione interna al tempo dei fotogrammi, con soglie e isteresi. Il menu permette anche Fluidità e Qualità alta. Il pannello F3 mostra FPS, tempo del fotogramma, draw call e scala di rendering.
-- Le ombre vengono aggiornate una volta ogni due fotogrammi e condivise fra vista normale e scope. Le schede nascoste sospendono il rendering, mentre il Worker e il server continuano a gestire la partita secondo i limiti imposti dal browser.
-- Le texture vengono preparate all'avvio e liberate insieme al renderer; i cicli critici mantengono buffer preallocati.
+Le grandi superfici usano texture diffuse e illuminazione Lambert invece di normali e rugosità PBR per pixel. Armi e accessori mantengono il percorso PBR/PMREM su GPU; il renderer software usa materiali Phong più economici. Cielo e mare hanno un percorso semplificato; la geometria distante resta a dettaglio limitato. Le ombre non vengono rigenerate ad ogni fotogramma.
 
-Non è possibile garantire assenza di scatti su qualsiasi GPU, connessione o browser. La regolazione automatica non sostituisce un test sul dispositivo dell'utente.
+## Correzione del movimento
 
-## Riprodurre le misure
+Il renderer viene creato quando inizia la partita, evitando lavoro 3D durante il collegamento alla lobby. Il Worker continua a simulare a 60 Hz e a riconciliare gli snapshot autoritativi. Durante un recupero di tick invia una sola posa al termine del ciclo, evitando raffiche di messaggi intermedi. Ogni posa porta il timestamp della simulazione, convertito nell'orologio del thread principale tramite `performance.timeOrigin`.
 
-Con la build ottimizzata già avviata su localhost:3000:
+Durante una risincronizzazione il Worker aspetta il nuovo handshake prima di applicare snapshot propri, non riavvolge le sequenze degli input e conserva la selezione dell’arma. I controlli WebSocket vengono elaborati in ordine con una coda limitata: risincronizzazione, ping e salvataggio non si scartano a vicenda quando arrivano ravvicinati.
+
+La presentazione interpola usando questi timestamp, con un tick di buffer, invece di assumere che ogni messaggio arrivi a distanza esatta di 16,67 ms. I campioni obsoleti vengono ignorati. Respawn, morte e teletrasporti interrompono l'interpolazione. La mira usa gli input mouse ancora non confermati dal Worker e non viene interpolata insieme alla posizione. Il FOV varia meno durante la corsa.
+
+## Misure riproducibili
+
+Con la build ottimizzata avviata:
 
 ```sh
-node scripts/fps-visual-benchmark.mjs nexus docs/benchmarks/fps-visual-after.json
+node scripts/fps-visual-benchmark.mjs depot docs/benchmarks/fps-native-depot.json
 ```
 
-Il benchmark apre Chromium headless a 1440×960, crea una lobby privata con cinque bot e campiona sei secondi dopo il riscaldamento. Conta le chiamate WebGL ed espone mediana e 95° percentile degli intervalli RAF. Il file `fps-visual-before.json` conserva una cattura del renderer precedente.
+Chromium headless apre una lobby con cinque bot, tiene W per due secondi e D per un secondo, poi campiona altri tre secondi. Il JSON contiene dimensioni reali del buffer e del canvas CSS, intervalli RAF e chiamate WebGL. Le vecchie catture `fps-visual-before.json` e `fps-visual-after.json` restano storiche: usavano una risoluzione inferiore, nessun movimento e spawn differenti, quindi non costituiscono un confronto controllato con la nuova cattura nativa.
 
-Le catture usano un renderer software, spawn casuali e bot attivi: sono esempi locali, non confronti controllati su GPU fisica né prove della capacità multiplayer. Un minor numero di draw call non garantisce da solo un maggior numero di FPS quando aumentano i dettagli della scena. Le misure hardware e di rete restano da effettuare.
+Le misure locali usano WebGL software, non la GPU dell'utente. Non dimostrano 60/144 FPS costanti, assenza assoluta di scatti o prestazioni su Internet. La risoluzione nativa è verificata; le prestazioni sul dispositivo reale devono essere misurate lì.
 
 ## Verifiche
 
-I test verificano tutti gli spawn, la riproducibilità della geometria, un percorso fra le basi delle nuove mappe, la registrazione delle stanze nel servizio WebSocket, la conservazione di pivot e bounding box durante il batching, il limite di mesh statiche, i materiali, il terreno, l'interpolazione e la regolazione della risoluzione. I test browser controllano le quattro opzioni di mappa, Bastione e Cedar giocabili, i relativi shader, il selettore di qualità e il salvataggio dei risultati.
+I test coprono spawn, geometria riproducibile, percorsi fra le basi, registrazione delle stanze, batching e pivot animati, materiali, terreno, timestamp irregolari, campioni obsoleti e limite minimo di risoluzione. I browser verificano due schede debug, movimento, cambio arma, sparo, scope, ricarica, mappe e salvataggio dei risultati, oltre alle dimensioni reali del drawing buffer e allo schermo intero. Un test sospende intenzionalmente il Worker per 350 ms e verifica cambio arma, movimento e salvataggio dopo la risincronizzazione; un test di servizio invia comandi ravvicinati mentre la persistenza è in corso.
 
-## Ultima cattura locale
+## Ultima cattura e verifica
 
-| Renderer   | Draw call medie | Mediana RAF | 95° percentile RAF |
-| ---------- | --------------: | ----------: | -----------------: |
-| Precedente |             171 |     33.3 ms |            49.9 ms |
-| Aggiornato |              53 |     33.3 ms |            33.4 ms |
+La cattura `fps-native-depot.json` registra un buffer di **1136×560**, identico alla dimensione CSS, con cinque bot e movimento: mediana RAF **33,3 ms**, 95° percentile **50 ms**. Lo spawn e la visibilità dei bot sono casuali; il risultato non è un confronto controllato con le catture precedenti. Su questo renderer software non vengono dichiarati 60 FPS.
 
-Le catture indipendenti mostrano una riduzione delle chiamate di disegno e della coda dei tempi dei fotogrammi, mentre la mediana rimane circa 33 ms sul renderer software. Non dimostrano 60 FPS costanti né prestazioni su GPU hardware. La qualità automatica può variare la risoluzione durante il campionamento.
-
-Verifica: 188 test automatici, 21 browser e 2 offline; TypeScript e build ottimizzata superati.
+Verifica finale: **196 test automatici, 22 test browser e 2 test offline**, oltre alla build ottimizzata con controllo TypeScript.

@@ -2,7 +2,7 @@
 
 Una piattaforma di giochi web in TypeScript: scegli un gioco, entra in partita e conserva i progressi nel tuo account. Dodici giochi, modalità offline e multiplayer, catalogo personalizzabile e moduli caricati su richiesta.
 
-Crossfire include un FPS autoritativo con sei armi, quattro mappe, quattro modalità e debug su due schede. Frontier include un RTS deterministico con mappa mondiale, conquista, economia, logistica e diplomazia.
+Crossfire include un FPS autoritativo con sei armi, cinque mappe, quattro modalità e debug su due schede. Frontier include un RTS deterministico con mappa mondiale, conquista, economia, logistica e diplomazia.
 
 ## Avvio rapido
 
@@ -49,11 +49,11 @@ Le sfide online di runner e volo condividono punteggi, senza collisioni fra gioc
 
 ### Crossfire
 
-Accedi, apri Crossfire e scegli **Partita rapida** oppure **Crea lobby**. Nelle lobby private condividi il codice di sei caratteri; il creatore avvia la partita. Bastione, Cedar, Nexus e Sandstorm offrono coperture, rampe, passerelle e jump-pad.
+Accedi, apri Crossfire e scegli **Partita rapida** oppure **Crea lobby**. Nelle lobby private condividi il codice di sei caratteri; il creatore avvia la partita. Depot, Bastione, Cedar, Nexus e Sandstorm offrono coperture, rampe, passerelle e jump-pad.
 
 - WASD: movimento; Shift: corsa; Spazio: salto; Ctrl/C: scivolata.
 - Mouse: visuale; sinistro: fuoco; destro: mira; 1–6: arma; R: ricarica.
-- Tab: classifica; F: ispezione; Esc: libera il mouse; F3: debug.
+- Tab: classifica; F: ispezione; Esc: libera il mouse; F3: debug. Il menu offre lo schermo intero e la qualità grafica senza scendere sotto la risoluzione nativa.
 - Per due schede dello stesso account, abilita **Debug in entrambe prima di collegarti**, crea una lobby e inserisci lo stesso codice nell'altra. Il pannello F3 permette al creatore di aggiungere bot con reazione configurabile.
 
 Il server controlla movimento, danni, munizioni, modalità e risultati. Le normali partite usano risultati verificati; quelle debug restano non verificate. In produzione il debug richiede l'abilitazione esplicita `FPS_DEBUG=true`.
@@ -111,7 +111,7 @@ npm run test:offline
 
 I test browser usano la porta 3000. I test offline avviano una propria istanza: prima arresta eventuali server locali su quella porta. Non eseguire una build dei Worker mentre è in corso un test browser.
 
-Ultima verifica completa: **188 test automatici, 21 test browser e 2 test offline**. Il dettaglio delle verifiche e dei limiti è in [docs/STATUS.md](docs/STATUS.md). La CI include PostgreSQL; l'esecuzione locale documentata usa PGlite.
+Ultima verifica completa: **196 test automatici, 22 test browser e 2 test offline**. Il dettaglio delle verifiche e dei limiti è in [docs/STATUS.md](docs/STATUS.md). La CI include PostgreSQL; l'esecuzione locale documentata usa PGlite.
 
 ## Distribuzione
 

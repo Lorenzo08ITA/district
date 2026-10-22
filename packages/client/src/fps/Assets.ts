@@ -18,7 +18,7 @@ export interface CharacterRig {
   leftLeg: THREE.Group;
   rightLeg: THREE.Group;
   weapon: THREE.Group;
-  armor: THREE.MeshStandardMaterial;
+  armor: THREE.MeshLambertMaterial;
 }
 const lensVertex = `varying vec2 uvLens;varying vec3 viewPosition;void main(){uvLens=uv;vec4 p=modelViewMatrix*vec4(position,1.);viewPosition=p.xyz;gl_Position=projectionMatrix*p;}`;
 const lensFragment = `precision highp float;varying vec2 uvLens;varying vec3 viewPosition;uniform sampler2D scopeTexture;uniform float scoped;void main(){vec2 p=uvLens*2.-1.;if(length(p)>1.)discard;vec2 angular=viewPosition.xy/max(.01,-viewPosition.z);float dotLight=1.-smoothstep(.002,.004,length(angular));float ring=1.-smoothstep(.001,.002,abs(length(angular)-.018));vec3 glass=vec3(.02,.16,.18);if(scoped>.5){glass=texture2D(scopeTexture,uvLens).rgb;float crosshair=1.-smoothstep(.003,.006,min(abs(p.x),abs(p.y)));glass=mix(glass,vec3(.02),crosshair*.8);gl_FragColor=vec4(glass,1.);}else gl_FragColor=vec4(glass+vec3(2.8,.13,.03)*(dotLight+ring*.35),.36+dotLight*.64+ring*.3);}`;
@@ -36,6 +36,7 @@ export class ProceduralWeaponFactory {
   readonly cloth = this.surfaces.material('fabric', 0x4c5448, 0, 0.9);
   readonly skin = new THREE.MeshStandardMaterial({ color: 0x9d765a, roughness: 0.82 });
   readonly rubber = this.surfaces.material('polymer', 0x121515, 0, 0.98);
+  private bodyMaterial = new THREE.MeshLambertMaterial({ vertexColors: true });
   private geometry = new Map<string, THREE.BufferGeometry>();
   rounded(w: number, h: number, d: number): THREE.BufferGeometry {
     const key = w + ':' + h + ':' + d;
@@ -480,7 +481,7 @@ export class ProceduralWeaponFactory {
     rightArm.position.set(0.3, 1.37, 0);
     leftLeg.position.set(-0.12, 0.8, 0);
     rightLeg.position.set(0.12, 0.8, 0);
-    const armor = this.surfaces.material('fabric', team ? 0x82715c : 0x4c625d, 0, 0.86),
+    const armor = new THREE.MeshLambertMaterial({ color: team ? 0x82715c : 0x4c625d }),
       patch = new THREE.MeshStandardMaterial({
         color: team ? 0xa94436 : 0x437f98,
         roughness: 0.85,
@@ -557,6 +558,22 @@ export class ProceduralWeaponFactory {
       this.mesh(leg, this.rounded(0.14, 0.12, 0.24), this.grip, 0, -0.73, -0.045);
       this.mesh(leg, this.rounded(0.145, 0.035, 0.25), this.rubber, 0, -0.795, -0.045);
     }
+    root.traverse((object) => {
+      if (!(object instanceof THREE.Mesh) || object.material === armor) return;
+      const material = object.material as THREE.MeshStandardMaterial;
+      const geometry = object.geometry.clone(),
+        count = geometry.getAttribute('position').count;
+      const colors = new Float32Array(count * 3);
+      for (let i = 0; i < count; i++) {
+        colors[i * 3] = material.color.r;
+        colors[i * 3 + 1] = material.color.g;
+        colors[i * 3 + 2] = material.color.b;
+      }
+      geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+      object.geometry = geometry;
+      object.material = this.bodyMaterial;
+    });
+    patch.dispose();
     batchStaticMeshes(root);
     const gun = this.create(WeaponId.Vanguard, false).root;
     gun.position.set(0.18, 1.22, -0.31);
@@ -567,6 +584,7 @@ export class ProceduralWeaponFactory {
   buildArena(arena: Arena): THREE.Group {
     const root = new THREE.Group(),
       desert = arena.name === 'sandstorm',
+      depot = arena.name === 'depot',
       town = arena.name === 'cedar' || arena.name === 'bastion',
       cedar = arena.name === 'cedar',
       coast = arena.name === 'bastion';
@@ -579,8 +597,8 @@ export class ProceduralWeaponFactory {
         0.9,
       ),
       this.surfaces.material('steel', 0x414b4f, 0.65, 0.55),
-      this.surfaces.material('steel', 0x826a52, 0.4, 0.65),
-      this.surfaces.material('plaster', 0xd6b78c),
+      this.surfaces.material('steel', depot ? 0x963b37 : 0x826a52, 0.4, 0.65),
+      this.surfaces.material('plaster', depot ? 0xc7cace : 0xd6b78c),
       this.surfaces.material('siding', 0x6c98a7),
       this.surfaces.material('roof', cedar ? 0x7d5f52 : 0xb17051),
       this.surfaces.material('brick', 0x8a8071),
@@ -589,7 +607,7 @@ export class ProceduralWeaponFactory {
       this.surfaces.material('siding', 0xbba37e),
       this.surfaces.material('wood', 0x7e654d),
       this.surfaces.material('steel', 0x294044, 0.8, 0.15),
-      this.surfaces.material('asphalt', 0x5b6060),
+      this.surfaces.material('asphalt', depot ? 0x737b80 : 0x5b6060),
     ];
     materials[6]!.side = THREE.DoubleSide;
     const records = arena.surfaces;
@@ -603,14 +621,22 @@ export class ProceduralWeaponFactory {
         kind = records[i + 6]!,
         material = materials[records[i + 7]!]!;
       if (kind === 0) {
-        this.mesh(
-          root,
-          this.rounded(X - x, Y - y, Z - z),
-          material,
-          (x + X) / 2,
-          (y + Y) / 2,
-          (z + Z) / 2,
-        );
+        const geometry = new THREE.BoxGeometry(X - x, Y - y, Z - z),
+          position = geometry.getAttribute('position'),
+          normal = geometry.getAttribute('normal'),
+          uv = geometry.getAttribute('uv');
+        // Four metres per repeat avoids stretching a small texture across an entire floor.
+        for (let vertex = 0; vertex < position.count; vertex++) {
+          const wx = position.getX(vertex) + (x + X) / 2,
+            wy = position.getY(vertex) + (y + Y) / 2,
+            wz = position.getZ(vertex) + (z + Z) / 2;
+          uv.setXY(
+            vertex,
+            (Math.abs(normal.getX(vertex)) > 0.5 ? wz : wx) * 0.25,
+            (Math.abs(normal.getY(vertex)) > 0.5 ? wz : wy) * 0.25,
+          );
+        }
+        this.mesh(root, geometry, material, (x + X) / 2, (y + Y) / 2, (z + Z) / 2);
         if (!town && arena.name === 'nexus' && Y - y > 0.8 && Y > 0)
           this.mesh(
             root,
@@ -638,6 +664,23 @@ export class ProceduralWeaponFactory {
         g.computeVertexNormals();
         this.mesh(root, g, town && y > 5 ? materials[6]! : materials[0]!, 0, 0, 0);
       }
+    }
+    if (depot) {
+      for (const x of [-14, 14])
+        for (let z = -28; z < 29; z += 6)
+          this.mesh(root, new THREE.BoxGeometry(0.13, 0.015, 3.2), materials[9]!, x, 0.02, z);
+      for (const side of [-1, 1]) {
+        const x = side < 0 ? -15.95 : 15.95;
+        for (const z of [-10, 3, 16])
+          this.mesh(root, new THREE.BoxGeometry(0.08, 0.35, 6), materials[3]!, x, 4.9, z - 3);
+        for (const z of [-14, -5, 5, 14]) {
+          this.mesh(root, new THREE.BoxGeometry(0.25, 6.4, 0.25), materials[2]!, x, 3.2, z);
+          this.mesh(root, new THREE.BoxGeometry(21.5, 0.3, 0.22), materials[2]!, side * 27, 6.1, z);
+        }
+      }
+      for (const x of [-4.5, 4.5])
+        for (let z = -1.3; z < 2; z += 0.35)
+          this.mesh(root, new THREE.BoxGeometry(0.06, 2.4, 0.045), materials[2]!, x, 1.25, z);
     }
     if (town) {
       for (const cx of [-24, 24]) {
@@ -758,7 +801,7 @@ export class ProceduralWeaponFactory {
               );
           }
       }
-    } else {
+    } else if (!depot) {
       for (let i = 0; i < arena.pads.records.length; i += 9) {
         const p = arena.pads.records,
           ring = this.mesh(
@@ -800,6 +843,32 @@ export class ProceduralWeaponFactory {
           dish.rotation.z = side * 0.5;
         }
     }
+    // Diffuse textures retain architectural detail without per-pixel PBR normal/specular work.
+    const diffuse = new Map<THREE.Material, THREE.MeshLambertMaterial>();
+    root.traverse((object) => {
+      if (
+        !(object instanceof THREE.Mesh) ||
+        !(object.material instanceof THREE.MeshStandardMaterial)
+      )
+        return;
+      const original = object.material;
+      let material = diffuse.get(original);
+      if (!material) {
+        material = new THREE.MeshLambertMaterial({
+          color: original.color,
+          emissive: original.emissive,
+          emissiveIntensity: original.emissiveIntensity,
+          map: original.map,
+          alphaTest: original.alphaTest,
+          alphaToCoverage: original.alphaTest > 0,
+          side: original.side,
+        });
+        diffuse.set(original, material);
+      }
+      object.material = material;
+    });
+    for (const material of diffuse.keys())
+      if (materials.includes(material as THREE.MeshStandardMaterial)) material.dispose();
     batchStaticMeshes(root);
     return root;
   }

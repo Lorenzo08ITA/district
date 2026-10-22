@@ -34,7 +34,8 @@ const modes: Record<string, string> = {
   hardpoint: 'Hardpoint',
 };
 export default function Crossfire({ owner, paused, onAuthoritativeResult }: GameProps) {
-  const host = useRef<HTMLDivElement>(null),
+  const arenaElement = useRef<HTMLDivElement>(null),
+    host = useRef<HTMLDivElement>(null),
     worker = useRef<Worker | null>(null),
     runtime = useRef<FpsRuntime | null>(null),
     keys = useRef(new Set<string>()),
@@ -43,10 +44,11 @@ export default function Crossfire({ owner, paused, onAuthoritativeResult }: Game
     frame = useRef(new Float64Array(24)),
     identity = useRef({ id: 0, key: '' }),
     finished = useRef(false),
+    qualityChoice = useRef<'auto' | 'performance' | 'quality'>('auto'),
     resultCallback = useRef(onAuthoritativeResult);
   resultCallback.current = onAuthoritativeResult;
   const [quality, setQuality] = useState<'auto' | 'performance' | 'quality'>('auto'),
-    [map, setMap] = useState<ArenaName>('bastion'),
+    [map, setMap] = useState<ArenaName>('depot'),
     [mode, setMode] = useState('ffa'),
     [debug, setDebug] = useState(
       () => new URLSearchParams(location.search).get('debug') === 'true',
@@ -82,6 +84,7 @@ export default function Crossfire({ owner, paused, onAuthoritativeResult }: Game
       remaining: number;
       players: Player[];
     } | null>(null);
+  qualityChoice.current = quality;
   const isGuest = owner === 'guest' || owner.startsWith('guest:');
   function control(value: unknown) {
     worker.current?.postMessage({ type: 'control', value });
@@ -125,12 +128,24 @@ export default function Crossfire({ owner, paused, onAuthoritativeResult }: Game
     setConnecting(true);
     finished.current = false;
     const tabId = crypto.randomUUID(),
-      next = new Worker('/generated/fps-worker.js?v=visual-2');
+      next = new Worker('/generated/fps-worker.js?v=native-4');
     sessionStorage.setItem('district-fps-tab', tabId);
     worker.current = next;
     next.onerror = () => {
       setError('Motore FPS non disponibile. Ricarica la pagina.');
       setConnecting(false);
+    };
+    const initializeArena = (map: ArenaName) => {
+      if (runtime.current || !host.current) return;
+      try {
+        runtime.current = new FpsRuntime(host.current, map);
+        runtime.current.identify(identity.current.id);
+        runtime.current.setQuality(qualityChoice.current);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'WebGL non disponibile');
+        next.postMessage({ type: 'stop' });
+        setConnecting(false);
+      }
     };
     next.onmessage = (event) => {
       if (worker.current !== next) return;
@@ -138,23 +153,15 @@ export default function Crossfire({ owner, paused, onAuthoritativeResult }: Game
         value = message.value;
       switch (message.type) {
         case 'welcome':
-          try {
-            identity.current = { id: value.playerId, key: value.sessionKey };
-            if (!runtime.current && host.current)
-              runtime.current = new FpsRuntime(host.current, value.map);
-            runtime.current?.identify(value.playerId);
-            runtime.current?.setQuality(quality);
-            setStatus('Connesso');
-            setConnecting(false);
-          } catch (e) {
-            setError(e instanceof Error ? e.message : 'WebGL non disponibile');
-            next.postMessage({ type: 'stop' });
-            setConnecting(false);
-          }
+          identity.current = { id: value.playerId, key: value.sessionKey };
+          if (value.started) initializeArena(value.map);
+          setStatus('Connesso');
+          setConnecting(false);
           break;
         case 'lobby':
           roster.current = value.players;
           setLobby(value);
+          if (value.started) initializeArena(value.map);
           break;
         case 'state':
           roster.current = value.players;
@@ -163,7 +170,11 @@ export default function Crossfire({ owner, paused, onAuthoritativeResult }: Game
           break;
         case 'frame':
           frame.current.set(message.values);
-          runtime.current?.frame(message.values, message.lookSequence ?? 0);
+          runtime.current?.frame(
+            message.values,
+            message.lookSequence ?? 0,
+            message.sampledAt - performance.timeOrigin,
+          );
           break;
         case 'remote':
           runtime.current?.remote(message.tick, message.values);
@@ -327,6 +338,7 @@ export default function Crossfire({ owner, paused, onAuthoritativeResult }: Game
     isHost = lobby?.host === identity.current.key;
   return (
     <div
+      ref={arenaElement}
       className="fps-game"
       data-fps={Math.round(hud.fps)}
       data-draw-calls={hud.drawCalls}
@@ -344,7 +356,7 @@ export default function Crossfire({ owner, paused, onAuthoritativeResult }: Game
         <div className="fps-setup">
           <div className="eyebrow">CROSSFIRE / ARENA</div>
           <h2>Entra. Muoviti. Colpisci.</h2>
-          <p>6 armi · 4 mappe · server a 60 Hz</p>
+          <p>6 armi · 5 mappe · server a 60 Hz</p>
           <div className="fps-fields">
             <label>
               Mappa
@@ -553,6 +565,19 @@ export default function Crossfire({ owner, paused, onAuthoritativeResult }: Game
               <option value="performance">Fluidità</option>
               <option value="quality">Qualità alta</option>
             </select>
+            <button
+              onClick={() => {
+                release();
+                const operation = document.fullscreenElement
+                  ? document.exitFullscreen()
+                  : arenaElement.current?.requestFullscreen();
+                void operation?.catch(() =>
+                  setStatus('Schermo intero non disponibile nel browser.'),
+                );
+              }}
+            >
+              Schermo intero
+            </button>
             <button onClick={() => setDebugPanel((v) => !v)}>F3 · Debug</button>
             <button
               onClick={() => {

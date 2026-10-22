@@ -1,4 +1,4 @@
-const CACHE='district-v4';
+const CACHE='district-v6';
 self.addEventListener('install',event=>{event.waitUntil(caches.open(CACHE).then(async c=>{await c.addAll(['/','/manifest.json','/icon.svg']);const html=await (await c.match('/')).text();const assets=[...html.matchAll(/(?:src|href)="([^" ]*\/_next\/static\/[^" ]+\.(?:js|css)(?:\?[^" ]*)?)"/g)].map(m=>m[1].replace(/&amp;/g,'&'));await c.addAll([...new Set(assets)]);}));});
 self.addEventListener('activate',event=>{event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim()));});
 self.addEventListener('fetch',event=>{const url=new URL(event.request.url);if(event.request.method!=='GET'||url.origin!==location.origin||url.pathname.startsWith('/api/')||url.pathname.startsWith('/socket.io/')||url.searchParams.has('_rsc'))return;

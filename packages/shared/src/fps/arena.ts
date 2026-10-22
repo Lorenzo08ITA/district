@@ -1,9 +1,10 @@
 import { WorldBuilder } from './bvh.js';
 import { JumpPads } from './kinematics.js';
 import { Vec3, RayHit } from './math.js';
-export const ARENA_NAMES = ['nexus', 'sandstorm', 'bastion', 'cedar'] as const;
+export const ARENA_NAMES = ['nexus', 'sandstorm', 'bastion', 'cedar', 'depot'] as const;
 export type ArenaName = (typeof ARENA_NAMES)[number];
 export const ARENA_LABELS: Record<ArenaName, string> = {
+  depot: 'Depot · magazzini industriali',
   nexus: 'Nexus · laboratorio alpino',
   sandstorm: 'Sandstorm · avamposto desertico',
   bastion: 'Bastione · costa mediterranea',
@@ -44,7 +45,33 @@ export function createArena(name: ArenaName): Arena {
     else geometry.ramp(x, z, X, Z, lo, hi);
   }
   const town = name === 'bastion' || name === 'cedar';
-  if (town) {
+  if (name === 'depot') {
+    box(-43, -1, -33, 43, 0, 33, 13);
+    box(-44, 0, -34, -42, 8, 34, 0);
+    box(42, 0, -34, 44, 8, 34, 0);
+    box(-44, 0, -34, 44, 8, -32, 0);
+    box(-44, 0, 32, 44, 8, 34, 0);
+    for (const side of [-1, 1]) {
+      const x = side < 0 ? -38 : 16,
+        X = side < 0 ? -16 : 38;
+      box(x, 0, -16, X, 6.5, -15.6, 4);
+      box(x, 0, 15.6, X, 6.5, 16, 4);
+      const outside = side < 0 ? x : X - 0.4;
+      box(outside, 0, -16, outside + 0.4, 6.5, 16, 4);
+      const inside = side < 0 ? X - 0.4 : x;
+      for (const z of [-16, -3, 10]) box(inside, 0, z, inside + 0.4, 6.5, z + 6, 4);
+      box(x, 6.5, -16, X, 6.75, 16, 0);
+      box(x, 3.05, -15.6, X, 3.2, -6, 2);
+      ramp(side < 0 ? -38 : 35, -29, side < 0 ? -35 : 38, -6, 0, 3.2);
+      box(x + 3, 0, 5, x + 7, 1.1, 9, 11);
+      box(x + 10, 0, -13, x + 14, 1.4, -9, 11);
+    }
+    box(-16, 3.05, -8, 16, 3.2, -5, 2);
+    box(-5, 0, -1.5, 5, 2.6, 2, 3);
+    box(-10, 0, 10, -6, 1.25, 16, 5);
+    box(6, 0, 10, 10, 1.25, 16, 5);
+    box(-4, 0, -22, 4, 1.1, -18, 11);
+  } else if (town) {
     box(-43, -1, -33, 43, 0, 33, 1);
     box(-43, 0, -33, -42.5, 3, 33, 8);
     box(42.5, 0, -33, 43, 3, 33, 8);
@@ -187,7 +214,9 @@ export function createArena(name: ArenaName): Arena {
       else waypoints.push(x, 0.01, z);
     }
   const pads = new JumpPads(
-    town ? [] : [-38, -0.05, -22, -34, 0.3, -18, 0, 14, 14, 34, -0.05, 18, 38, 0.3, 22, 0, 14, -14],
+    town || name === 'depot'
+      ? []
+      : [-38, -0.05, -22, -34, 0.3, -18, 0, 14, 14, 34, -0.05, 18, 38, 0.3, 22, 0, 14, -14],
   );
   return {
     name,

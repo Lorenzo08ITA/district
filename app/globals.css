@@ -2154,3 +2154,6 @@ dialog.modal-backdrop::backdrop {
     flex-basis: 100%;
   }
 }
+
+.fps-game:fullscreen { width: 100vw; height: 100vh; min-height: 0; }
+.fps-toolbar select { width: auto; max-width: 190px; }

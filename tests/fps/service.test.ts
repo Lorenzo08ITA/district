@@ -36,7 +36,7 @@ const cleanup: (() => Promise<void>)[] = [];
 afterEach(async () => {
   for (const close of cleanup.splice(0)) await close();
 });
-async function setup(debugAllowed = true) {
+async function setup(debugAllowed = true, checkpointDelay = 0) {
   const server = createServer(),
     saved = new Map<string, { value: FpsResult; verified: boolean }>(),
     checkpoints: FpsCheckpoint[] = [],
@@ -48,6 +48,7 @@ async function setup(debugAllowed = true) {
         cookie === 'alpha' || cookie === 'beta' ? { id: cookie, name: cookie } : null,
       store: {
         async checkpoint(s) {
+          if (checkpointDelay) await new Promise((resolve) => setTimeout(resolve, checkpointDelay));
           checkpoints.push(structuredClone(s));
         },
         async result(account, value, verified) {
@@ -108,6 +109,19 @@ describe('FPS websocket trust boundary', () => {
       });
       expect(code).toBe(cookie === 'missing' ? 401 : 403);
     }
+  });
+  it('serializes controls while persistence is pending instead of dropping resync or finish', async () => {
+    const app = await setup(true, 30),
+      a = await app.client();
+    a.send(config());
+    await a.wait('welcome');
+    a.send({ type: 'start' });
+    a.send({ type: 'resync' });
+    a.send({ type: 'finish' });
+    await a.wait('welcome');
+    await a.wait('result');
+    expect(a.packets.filter((p) => p.type === 'error')).toEqual([]);
+    expect(app.saved.size).toBe(1);
   });
   it('isolates two debug tabs on the same account, starts only as host and saves unranked results', async () => {
     const app = await setup(),
@@ -176,7 +190,7 @@ describe('FPS websocket trust boundary', () => {
     a.send({ type: 'resync' });
     expect((await a.wait('welcome')).nextSequence).toBe(1);
   });
-  for (const map of ['bastion', 'cedar'])
+  for (const map of ['depot', 'bastion', 'cedar'])
     it(
       'accepts and synchronizes the ' + map + ' arena over the authoritative service',
       async () => {

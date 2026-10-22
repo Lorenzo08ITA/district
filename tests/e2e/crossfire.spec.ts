@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Worker } from '@playwright/test';
 test('Crossfire: due schede debug, lobby, armi, movimento e risultati persistiti', async ({
   browser,
 }) => {
@@ -18,11 +18,13 @@ test('Crossfire: due schede debug, lobby, armi, movimento e risultati persistiti
       const NativeWorker = window.Worker;
       (window as any).fpsFrames = [];
       (window as any).fpsShots = 0;
+      (window as any).fpsWelcomes = 0;
       window.Worker = class extends NativeWorker {
         constructor(url: string | URL, options?: WorkerOptions) {
           super(url, options);
           if (String(url).includes('fps-worker'))
             this.addEventListener('message', (event) => {
+              if (event.data.type === 'welcome') (window as any).fpsWelcomes++;
               if (event.data.type === 'frame') {
                 const list = (window as any).fpsFrames;
                 list.push(Array.from(event.data.values));
@@ -42,6 +44,10 @@ test('Crossfire: due schede debug, lobby, armi, movimento e risultati persistiti
       await page.getByRole('button', { name: 'Inizia', exact: false }).click();
       await page.getByRole('checkbox').check();
     }
+    let simulation: Worker | undefined;
+    a.on('worker', (worker) => {
+      if (worker.url().includes('fps-worker')) simulation = worker;
+    });
     await a.getByLabel('Mappa FPS').selectOption('sandstorm');
     await a.getByLabel('Modalità FPS').selectOption('tdm');
     await a.getByLabel('Bot iniziali').selectOption('0');
@@ -62,6 +68,16 @@ test('Crossfire: due schede debug, lobby, armi, movimento e risultati persistiti
     await expect.poll(() => a.evaluate(() => !!document.pointerLockElement)).toBe(true);
     await a.keyboard.press('Digit2');
     await expect(a.locator('.fps-hud')).toContainText('Kraber');
+    expect(simulation).toBeDefined();
+    await simulation!.evaluate(() => {
+      const until = performance.now() + 350;
+      while (performance.now() < until) {
+        /* Simulate a suspended simulation worker. */
+      }
+    });
+    await expect.poll(() => a.evaluate(() => (window as any).fpsWelcomes)).toBeGreaterThan(1);
+    await expect(a.locator('.fps-hud')).toContainText('Kraber');
+    await expect(a.locator('.fps-error')).toHaveCount(0);
     await a.keyboard.press('Digit1');
     await expect(a.locator('.fps-hud')).toContainText('Vanguard');
     const before = await a.evaluate(() => {

@@ -67,3 +67,9 @@ Verificata anche la nuova mappa mondiale di Frontier, con conquista, costruzione
 ## Aggiornamento visivo Crossfire
 
 Quattro mappe nel protocollo/lobby, aggiunte Bastione e Cedar con ingressi, finestre, livelli e rampe condivisi con la fisica. Nuovi dettagli su armi, guanti e operatori, materiali PBR procedurali, cielo/nuvole, mare, rilievi e vegetazione istanziata. Batching statico, interpolazione della camera, mira immediata con conferma del Worker, riconoscimento dei respawn, risoluzione adattiva e menu qualità. Nuovi test su geometria/spawn/percorsi, materiali, batching, atmosfera, presentazione e stanze WebSocket. [Dettagli e limiti delle misure](FPS-VISUALS.md).
+
+## Correzione nitidezza e scatti Crossfire
+
+Eliminati il render target HDR sottocampionato e il bloom completo; rendering diretto almeno alla risoluzione CSS. MSAA hardware, materiali diffusi per le mappe, Phong sul renderer software e batching dei colori degli operatori. Pose Worker aggregate e interpolate con timestamp di simulazione; mira indipendente. Aggiunti Depot e schermo intero. Il riferimento Deadshot.io è stato osservato in partita; Crossfire conserva contenuti propri e non è una replica completa. Misure riproducibili e limiti in [FPS-VISUALS.md](FPS-VISUALS.md).
+
+Verifica dell'aggiornamento: 196 test automatici, 22 test browser e 2 test offline superati; build TypeScript/Next ottimizzata superata. Regressioni specifiche coperte: pausa del Worker di 350 ms, sequenze monotone dopo il resync, selezione dell'arma conservata, movimento ripreso e controlli in coda durante la persistenza. Le texture architettoniche usano UV in metri per evitare l'ingrandimento della piccola texture sull'intera mappa.

@@ -92,7 +92,8 @@ interface Peer {
   authAt: number;
   reader: PacketReader;
   input: PlayerInput;
-  handling: boolean;
+  controls: Promise<void>;
+  pendingControls: number;
 }
 const configure = {
   map: z.enum(ARENA_NAMES),
@@ -672,7 +673,8 @@ export function attachFps(
             authAt: Date.now(),
             reader: new PacketReader(8192),
             input: new PlayerInput(),
-            handling: false,
+            controls: Promise.resolve(),
+            pendingControls: 0,
           };
           peers.add(peer);
           send(peer, { type: 'ready', debugAllowed: options.debugAllowed });
@@ -712,11 +714,15 @@ export function attachFps(
                 }
               } else {
                 if (++peer.controlCount > 10) throw new Error('Troppi controlli');
-                if (peer.handling) throw new Error('Operazione in corso');
+                if (peer.pendingControls >= 8) throw new Error('Troppi controlli in attesa');
                 const packet = decodeWire(data);
                 if (packet.kind !== WireKind.Control) throw new Error('Tipo messaggio non valido');
-                peer.handling = true;
-                void handle(peer, packet.value)
+                peer.pendingControls++;
+                peer.controls = peer.controls
+                  .then(() => {
+                    if (peer.socket.readyState === WebSocket.OPEN)
+                      return handle(peer, packet.value);
+                  })
                   .catch((error) =>
                     notice(
                       peer,
@@ -728,7 +734,7 @@ export function attachFps(
                     ),
                   )
                   .finally(() => {
-                    peer.handling = false;
+                    peer.pendingControls--;
                   });
               }
             } catch (error) {

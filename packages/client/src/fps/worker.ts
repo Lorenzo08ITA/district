@@ -31,6 +31,7 @@ let socket: WebSocket | null = null,
   carrying = false,
   started = false,
   initialized = false,
+  awaitingWelcome = true,
   sequence = 1,
   buttons = 0,
   latchedButtons = 0,
@@ -59,7 +60,7 @@ const ring = new InputRingBuffer(),
   errorOffset = new Vec3(),
   before = new Vec3();
 const localValues = new Float64Array(24),
-  localEnvelope = { type: 'frame', values: localValues, lookSequence: 0 },
+  localEnvelope = { type: 'frame', values: localValues, lookSequence: 0, sampledAt: 0 },
   remoteValues = new Float64Array(12 * 12),
   remoteEnvelope = { type: 'remote', tick: 0, values: remoteValues },
   shotValues = new Float64Array(4),
@@ -71,6 +72,7 @@ function post(type: string, value: unknown) {
   scope.postMessage({ type, value });
 }
 function sendResync() {
+  awaitingWelcome = true;
   initialized = false;
   ring.clear();
   control({ type: 'resync' });
@@ -102,7 +104,7 @@ function simulate(value: Readonly<PlayerInput>, replay: boolean) {
 }
 const aim = { ads: false, grounded: true, sliding: false, speed: 0 };
 function reconcile(record: PlayerSnapshot) {
-  if (!controller) return;
+  if (!controller || awaitingWelcome) return;
   const wasDead = hp <= 0;
   hp = record.hp;
   serverTick = record.state.tick;
@@ -113,7 +115,7 @@ function reconcile(record: PlayerSnapshot) {
   weapons.bloom[record.weapon] = record.bloom;
   weapons.shots[record.weapon] = record.shots;
   if (!initialized || (wasDead && hp > 0)) {
-    weapon = record.weapon;
+    if (wasDead) weapon = record.weapon;
     controller.state.copy(record.state);
     ring.clear();
     yaw = record.yaw;
@@ -199,7 +201,8 @@ function connect() {
         else control(configuration.join);
       } else if (value.type === 'welcome') {
         playerId = Number(value.playerId);
-        sequence = Number(value.nextSequence);
+        sequence = Math.max(sequence, Number(value.nextSequence));
+        awaitingWelcome = false;
         code = String(value.code);
         started = !!value.started;
         const map = value.map as ArenaName;
@@ -238,6 +241,7 @@ function connect() {
   };
   socket.onclose = (event) => {
     if (stopped) return;
+    awaitingWelcome = true;
     initialized = false;
     started = false;
     post(
@@ -262,6 +266,7 @@ const timer = setInterval(() => {
   }
   accumulator += Math.min(100, elapsed);
   let count = 0;
+  let advanced = false;
   while (accumulator >= 1000 / 60 && count++ < 4) {
     accumulator -= 1000 / 60;
     if (!controller || !started || !initialized || socket?.readyState !== WebSocket.OPEN) continue;
@@ -313,6 +318,10 @@ const timer = setInterval(() => {
     localValues[21] = sequence;
     localValues[22] = ring.length;
     localValues[23] = s.impactVelocity;
+    advanced = true;
+  }
+  if (advanced) {
+    localEnvelope.sampledAt = performance.timeOrigin + now - accumulator;
     scope.postMessage(localEnvelope);
   }
 }, 4);
