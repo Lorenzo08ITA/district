@@ -2,7 +2,7 @@
 
 Una piattaforma di giochi web in TypeScript: scegli un gioco, entra in partita e conserva i progressi nel tuo account. Dodici giochi, modalità offline e multiplayer, catalogo personalizzabile e moduli caricati su richiesta.
 
-Crossfire include un FPS autoritativo con sei armi, due mappe, quattro modalità e debug su due schede. Frontier include un RTS deterministico con mappa mondiale, conquista, economia, logistica e diplomazia.
+Crossfire include un FPS autoritativo con sei armi, quattro mappe, quattro modalità e debug su due schede. Frontier include un RTS deterministico con mappa mondiale, conquista, economia, logistica e diplomazia.
 
 ## Avvio rapido
 
@@ -49,7 +49,7 @@ Le sfide online di runner e volo condividono punteggi, senza collisioni fra gioc
 
 ### Crossfire
 
-Accedi, apri Crossfire e scegli **Partita rapida** oppure **Crea lobby**. Nelle lobby private condividi il codice di sei caratteri; il creatore avvia la partita. Nexus e Sandstorm offrono coperture, rampe, passerelle e jump-pad.
+Accedi, apri Crossfire e scegli **Partita rapida** oppure **Crea lobby**. Nelle lobby private condividi il codice di sei caratteri; il creatore avvia la partita. Bastione, Cedar, Nexus e Sandstorm offrono coperture, rampe, passerelle e jump-pad.
 
 - WASD: movimento; Shift: corsa; Spazio: salto; Ctrl/C: scivolata.
 - Mouse: visuale; sinistro: fuoco; destro: mira; 1–6: arma; R: ricarica.
@@ -111,7 +111,7 @@ npm run test:offline
 
 I test browser usano la porta 3000. I test offline avviano una propria istanza: prima arresta eventuali server locali su quella porta. Non eseguire una build dei Worker mentre è in corso un test browser.
 
-Ultima verifica completa: **174 test automatici, 19 test browser e 2 test offline**. Il dettaglio delle verifiche e dei limiti è in [docs/STATUS.md](docs/STATUS.md). La CI include PostgreSQL; l'esecuzione locale documentata usa PGlite.
+Ultima verifica completa: **188 test automatici, 21 test browser e 2 test offline**. Il dettaglio delle verifiche e dei limiti è in [docs/STATUS.md](docs/STATUS.md). La CI include PostgreSQL; l'esecuzione locale documentata usa PGlite.
 
 ## Distribuzione
 
@@ -122,6 +122,7 @@ Sono inclusi [Dockerfile](Dockerfile) e [compose.yaml](compose.yaml). Proxy HTTP
 ## Documentazione
 
 - [Architettura e database](docs/ARCHITECTURE.md)
+- [FPS: nuovi modelli, mappe, shader e fluidità](docs/FPS-VISUALS.md)
 - [FPS: server, renderer, protocollo e debug](docs/FPS-STEP2-3.md)
 - [RTS: simulazione, interfaccia e persistenza](docs/RTS-STEP3.md)
 - [Dati della mappa mondiale](data/geography/README.md)

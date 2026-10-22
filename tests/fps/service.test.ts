@@ -176,6 +176,23 @@ describe('FPS websocket trust boundary', () => {
     a.send({ type: 'resync' });
     expect((await a.wait('welcome')).nextSequence).toBe(1);
   });
+  for (const map of ['bastion', 'cedar'])
+    it(
+      'accepts and synchronizes the ' + map + ' arena over the authoritative service',
+      async () => {
+        const app = await setup(),
+          a = await app.client();
+        a.send({ ...config('create'), map });
+        const welcome = await a.wait('welcome');
+        expect(welcome.map).toBe(map);
+        a.send({ type: 'start' });
+        let lobby = await a.wait('lobby');
+        while (!lobby.started) lobby = await a.wait('lobby');
+        expect(lobby.map).toBe(map);
+        a.send({ type: 'finish' });
+        expect((await a.wait('result')).result.stats.map).toBe(map);
+      },
+    );
   it('revokes live sockets when authentication is logged out', async () => {
     const app = await setup(),
       a = await app.client();

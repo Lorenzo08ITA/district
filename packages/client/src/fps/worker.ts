@@ -59,7 +59,7 @@ const ring = new InputRingBuffer(),
   errorOffset = new Vec3(),
   before = new Vec3();
 const localValues = new Float64Array(24),
-  localEnvelope = { type: 'frame', values: localValues },
+  localEnvelope = { type: 'frame', values: localValues, lookSequence: 0 },
   remoteValues = new Float64Array(12 * 12),
   remoteEnvelope = { type: 'remote', tick: 0, values: remoteValues },
   shotValues = new Float64Array(4),
@@ -341,6 +341,7 @@ scope.onmessage = (event) => {
       fraction = 0;
       break;
     case 'look':
+      localEnvelope.lookSequence = Number(message.sequence) || 0;
       yaw += Number(message.dx) * 0.002;
       pitch = clamp(pitch - Number(message.dy) * 0.002, -1.55, 1.55);
       break;

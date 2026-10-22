@@ -2136,3 +2136,21 @@ dialog.modal-backdrop::backdrop {
     opacity: 0;
   }
 }
+.fps-toolbar select {
+  width: 165px;
+  flex: 0 0 auto;
+  font-size: 11px;
+  padding: 8px;
+}
+@media (max-width: 650px) {
+  .fps-toolbar select {
+    width: 120px;
+    font-size: 10px;
+  }
+  .fps-toolbar {
+    flex-wrap: wrap;
+  }
+  .fps-toolbar > span {
+    flex-basis: 100%;
+  }
+}

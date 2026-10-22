@@ -1,7 +1,10 @@
 import * as THREE from 'three';
+import { batchStaticMeshes } from './Surfaces.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { createArena, WeaponId, type ArenaName, Vec3, RayHit } from '@district/rts-shared/fps';
 import { ProceduralWeaponFactory, type WeaponRig, type CharacterRig } from './Assets.js';
+import { WorldBackdrop } from './Backdrop.js';
+import { PosePresentation, RenderBudget } from './Presentation.js';
 import { BallisticEffects } from './Effects.js';
 import { ProceduralAudioEngine } from './Audio.js';
 import { SecondOrderSpring3D } from './SecondOrderSpring3D.js';
@@ -10,9 +13,9 @@ export class FpsRuntime {
   readonly audio = new ProceduralAudioEngine();
   private scene = new THREE.Scene();
   private view = new THREE.Scene();
-  private camera = new THREE.PerspectiveCamera(100, 1, 0.05, 180);
+  private camera = new THREE.PerspectiveCamera(100, 1, 0.05, 650);
   private gunCamera = new THREE.PerspectiveCamera(68, 1, 0.015, 5);
-  private scopeCamera = new THREE.PerspectiveCamera(17, 1, 0.05, 180);
+  private scopeCamera = new THREE.PerspectiveCamera(17, 1, 0.05, 650);
   private target = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType });
   private scopeTarget = new THREE.WebGLRenderTarget(512, 512);
   private environment: THREE.WebGLRenderTarget | null = null;
@@ -32,6 +35,20 @@ export class FpsRuntime {
   private grounded = false;
   private shellTimer = 0;
   private local = new Float64Array(24);
+  private presentation = new PosePresentation();
+  private budget: RenderBudget;
+  private backdrop: WorldBackdrop;
+  private software = false;
+  private qualityMode = 'auto';
+  private shadowFrame = 0;
+  private lookSerial = 0;
+  private lookYaw = 0;
+  private lookPitch = 0;
+  private ackYaw = 0;
+  private ackPitch = 0;
+  private lookHistory = new Float64Array(256 * 3);
+  frameMs = 0;
+  resolutionScale = 1;
   private inspectActive = false;
   private weaponCache: Map<number, THREE.Group>[] = [];
   private remoteWeapons = new Uint8Array(12);
@@ -76,6 +93,14 @@ export class FpsRuntime {
       debug = gl.getExtension('WEBGL_debug_renderer_info'),
       device = debug ? String(gl.getParameter(debug.UNMASKED_RENDERER_WEBGL)) : '';
     const software = /swiftshader|llvmpipe|software/i.test(device);
+    this.software = software;
+    this.budget = new RenderBudget(
+      software ? 0.55 : 0.65,
+      software ? 1 : Math.min(devicePixelRatio, 1.5),
+      software ? 0.75 : Math.min(devicePixelRatio, 1.25),
+    );
+    this.renderer.info.autoReset = false;
+    this.renderer.shadowMap.autoUpdate = false;
     this.renderer.setPixelRatio(software ? 0.75 : Math.min(devicePixelRatio, 1.5));
     this.renderer.autoClear = false;
     this.renderer.shadowMap.enabled = !software;
@@ -90,20 +115,21 @@ export class FpsRuntime {
       this.scene.environment = this.view.environment = this.environment.texture;
       this.scene.environmentIntensity = 0.7;
       this.view.environmentIntensity = 1.1;
-      this.target.samples = 2;
+      this.target.samples = 0;
     }
     host.appendChild(this.renderer.domElement);
     this.renderer.domElement.setAttribute('aria-label', 'Arena Crossfire');
     const arena = createArena(map);
     this.arena = arena;
     this.scene.add(this.factory.buildArena(arena), this.effects.root);
-    this.scene.background = new THREE.Color(map === 'sandstorm' ? 0x6f797f : 0x0d1b2c);
-    this.scene.fog = new THREE.Fog(map === 'sandstorm' ? 0x8b8174 : 0x122b40, 45, 145);
+    this.backdrop = new WorldBackdrop(map, software, this.factory.surfaces);
+    this.scene.add(this.backdrop.root);
+    this.scene.fog = new THREE.Fog(this.backdrop.fog, 95, 440);
     this.scene.add(new THREE.HemisphereLight(0xa8ddff, 0x222333, 2));
     const sun = new THREE.DirectionalLight(0xffedcf, 3.8);
-    sun.position.set(-22, 40, 18);
+    sun.position.copy(this.backdrop.sun).multiplyScalar(80);
     sun.castShadow = true;
-    sun.shadow.mapSize.set(2048, 2048);
+    sun.shadow.mapSize.set(1024, 1024);
     sun.shadow.camera.left = -48;
     sun.shadow.camera.right = 48;
     sun.shadow.camera.top = 40;
@@ -119,12 +145,32 @@ export class FpsRuntime {
     for (const arm of [this.armLeft, this.armRight]) {
       const sleeve = new THREE.Mesh(
           new THREE.CapsuleGeometry(0.042, 0.24, 5, 10),
-          this.factory.polymer,
+          this.factory.cloth,
         ),
         glove = new THREE.Mesh(new THREE.CapsuleGeometry(0.043, 0.04, 5, 10), this.factory.grip);
       sleeve.rotation.x = -1.1;
       glove.position.set(0, 0.07, -0.12);
       arm.add(sleeve, glove);
+      for (let finger = 0; finger < 4; finger++) {
+        const joint = new THREE.Mesh(
+          new THREE.CapsuleGeometry(0.009, 0.027, 3, 7),
+          this.factory.grip,
+        );
+        joint.position.set(-0.027 + finger * 0.018, 0.065, -0.15);
+        joint.rotation.x = -0.65;
+        arm.add(joint);
+        const knuckle = new THREE.Mesh(new THREE.SphereGeometry(0.011, 7, 5), this.factory.rubber);
+        knuckle.position.set(-0.027 + finger * 0.018, 0.085, -0.155);
+        arm.add(knuckle);
+      }
+      const wrist = new THREE.Mesh(
+        new THREE.TorusGeometry(0.044, 0.006, 5, 20),
+        this.factory.rubber,
+      );
+      wrist.rotation.x = -1.1;
+      wrist.position.set(0, 0.05, -0.095);
+      arm.add(wrist);
+      batchStaticMeshes(arm);
       this.view.add(arm);
     }
     this.armLeft.position.set(-0.12, -0.37, -0.45);
@@ -223,8 +269,14 @@ export class FpsRuntime {
   identify(id: number): void {
     this.playerId = id;
   }
-  frame(values: Float64Array): void {
+  frame(values: Float64Array, lookAck = 0): void {
     this.local.set(values);
+    this.presentation.push(values, performance.now());
+    const index = (lookAck % 256) * 3;
+    if (this.lookHistory[index] === lookAck) {
+      this.ackYaw = this.lookHistory[index + 1]!;
+      this.ackPitch = this.lookHistory[index + 2]!;
+    }
     this.armed = true;
   }
   remote(tick: number, values: Float64Array): void {
@@ -251,9 +303,31 @@ export class FpsRuntime {
     this.latestTick = tick;
     this.remoteAt = performance.now();
   }
-  look(dx: number, dy: number): void {
+  look(dx: number, dy: number): number {
     this.mouseX += dx;
     this.mouseY += dy;
+    this.lookYaw += dx * 0.002;
+    this.lookPitch -= dy * 0.002;
+    const sequence = ++this.lookSerial,
+      o = (sequence % 256) * 3;
+    this.lookHistory[o] = sequence;
+    this.lookHistory[o + 1] = this.lookYaw;
+    this.lookHistory[o + 2] = this.lookPitch;
+    return sequence;
+  }
+  setQuality(mode: 'auto' | 'performance' | 'quality'): void {
+    this.qualityMode = mode;
+    const scale =
+      mode === 'performance'
+        ? 0.65
+        : mode === 'quality'
+          ? Math.min(devicePixelRatio, this.software ? 1 : 1.5)
+          : this.budget.scale;
+    this.renderer.setPixelRatio(scale);
+    this.resolutionScale = scale;
+    this.renderer.shadowMap.enabled = !this.software && mode !== 'performance';
+    this.renderer.shadowMap.needsUpdate = true;
+    this.resizeCanvas();
   }
   localShot(values: Float64Array): void {
     const id = values[0]!;
@@ -337,7 +411,7 @@ export class FpsRuntime {
   }): void {
     const arena = this.arena.hardpoints;
     for (const p of value.players)
-      this.characters[p.id - 1]?.armor.color.setHex(p.team ? 0x9c8794 : 0xb5d4dd);
+      this.characters[p.id - 1]?.armor.color.setHex(p.team ? 0x82715c : 0x4c625d);
     for (let i = 0; i < 2; i++) {
       const flag = this.flags[i]!;
       flag.visible = value.mode === 'ctf';
@@ -358,10 +432,20 @@ export class FpsRuntime {
   private render = (timestamp: number): void => {
     if (this.disposed) return;
     this.animation = requestAnimationFrame(this.render);
-    const dt = Math.min(
-      0.05,
-      Math.max(0.001, (timestamp - (this.previous || timestamp - 16)) / 1000),
-    );
+    if (document.hidden) {
+      this.previous = timestamp;
+      return;
+    }
+    const frameTime = Math.max(1, timestamp - (this.previous || timestamp - 16)),
+      dt = Math.min(0.05, frameTime / 1000);
+    this.frameMs = frameTime;
+    if (this.qualityMode === 'auto' && this.budget.sample(frameTime, timestamp)) {
+      this.renderer.setPixelRatio(this.budget.scale);
+      this.resolutionScale = this.budget.scale;
+      this.resizeCanvas();
+    }
+    this.renderer.info.reset();
+    this.renderer.shadowMap.needsUpdate = this.shadowFrame++ % 2 === 0;
     this.previous = timestamp;
     this.now = timestamp / 1000;
     if (!this.lastFrames) this.lastFrames = timestamp;
@@ -371,14 +455,19 @@ export class FpsRuntime {
       this.frames = 0;
       this.lastFrames = timestamp;
     }
-    const v = this.local,
+    const v = this.presentation.sample(timestamp),
       speed = Math.hypot(v[4]!, v[6]!),
       id = Math.max(0, Math.min(5, v[11]! | 0)),
       ads = !!v[18] && v[17]! <= 0,
       dead = v[10]! <= 0;
     if (this.armed) {
       this.camera.position.set(v[1]!, v[2]! + v[7]!, v[3]!);
-      this.camera.rotation.set(v[9]!, -v[8]!, 0, 'YXZ');
+      this.camera.rotation.set(
+        Math.max(-1.55, Math.min(1.55, this.local[9]! + this.lookPitch - this.ackPitch)),
+        -(this.local[8]! + this.lookYaw - this.ackYaw),
+        0,
+        'YXZ',
+      );
       const fov = ads ? (id === 1 ? 70 : 76) : 100 + Math.min(16, speed * 0.8);
       this.camera.fov += (fov - this.camera.fov) * Math.min(1, dt * 12);
       this.camera.updateProjectionMatrix();
@@ -414,10 +503,18 @@ export class FpsRuntime {
           present = this.history[b]! > 0 && this.history[b + 6]! > 0;
         rig.root.visible = present && i + 1 !== this.playerId;
         if (!rig.root.visible) continue;
+        const blend =
+          this.history[a + 6]! <= 0 ||
+          Math.hypot(
+            this.history[b + 1]! - this.history[a + 1]!,
+            this.history[b + 3]! - this.history[a + 3]!,
+          ) > 8
+            ? 1
+            : mix;
         rig.root.position.set(
-          this.history[a + 1]! + (this.history[b + 1]! - this.history[a + 1]!) * mix,
-          this.history[a + 2]! + (this.history[b + 2]! - this.history[a + 2]!) * mix,
-          this.history[a + 3]! + (this.history[b + 3]! - this.history[a + 3]!) * mix,
+          this.history[a + 1]! + (this.history[b + 1]! - this.history[a + 1]!) * blend,
+          this.history[a + 2]! + (this.history[b + 2]! - this.history[a + 2]!) * blend,
+          this.history[a + 3]! + (this.history[b + 3]! - this.history[a + 3]!) * blend,
         );
         const angle = Math.atan2(
           Math.sin(this.history[b + 4]! - this.history[a + 4]!),
@@ -494,6 +591,12 @@ export class FpsRuntime {
       this.audio.casing();
       this.shellTimer = 0;
     }
+    this.backdrop.update(
+      this.now,
+      this.camera.position.x,
+      this.camera.position.y,
+      this.camera.position.z,
+    );
     this.effects.update(this.now, dt);
     this.post.uniforms.hurt!.value *= Math.exp(-dt * 3);
     if (this.armed && ads && id === 1 && !dead) {
@@ -543,6 +646,8 @@ export class FpsRuntime {
     this.target.dispose();
     this.scopeTarget.dispose();
     this.environment?.dispose();
+    this.factory.surfaces.dispose();
+    this.backdrop.dispose();
     this.renderer.dispose();
     this.renderer.forceContextLoss();
     this.renderer.domElement.remove();

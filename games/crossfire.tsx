@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
+import { ARENA_NAMES, ARENA_LABELS, type ArenaName } from '@district/rts-shared/fps';
 import { FpsRuntime } from '../packages/client/dist/fps/Runtime.js';
 import type { GameProps } from './types';
 import type { Result } from '../lib/catalog';
@@ -18,7 +19,7 @@ type Player = {
 };
 type Lobby = {
   code: string;
-  map: 'nexus' | 'sandstorm';
+  map: ArenaName;
   mode: string;
   debug: boolean;
   started: boolean;
@@ -44,7 +45,8 @@ export default function Crossfire({ owner, paused, onAuthoritativeResult }: Game
     finished = useRef(false),
     resultCallback = useRef(onAuthoritativeResult);
   resultCallback.current = onAuthoritativeResult;
-  const [map, setMap] = useState<'nexus' | 'sandstorm'>('nexus'),
+  const [quality, setQuality] = useState<'auto' | 'performance' | 'quality'>('auto'),
+    [map, setMap] = useState<ArenaName>('bastion'),
     [mode, setMode] = useState('ffa'),
     [debug, setDebug] = useState(
       () => new URLSearchParams(location.search).get('debug') === 'true',
@@ -71,6 +73,9 @@ export default function Crossfire({ owner, paused, onAuthoritativeResult }: Game
       fps: 0,
       queue: 0,
       tick: 0,
+      frameMs: 0,
+      drawCalls: 0,
+      scale: 1,
     }),
     [state, setState] = useState<{
       teamScores: number[];
@@ -120,7 +125,7 @@ export default function Crossfire({ owner, paused, onAuthoritativeResult }: Game
     setConnecting(true);
     finished.current = false;
     const tabId = crypto.randomUUID(),
-      next = new Worker('/generated/fps-worker.js');
+      next = new Worker('/generated/fps-worker.js?v=visual-2');
     sessionStorage.setItem('district-fps-tab', tabId);
     worker.current = next;
     next.onerror = () => {
@@ -138,6 +143,7 @@ export default function Crossfire({ owner, paused, onAuthoritativeResult }: Game
             if (!runtime.current && host.current)
               runtime.current = new FpsRuntime(host.current, value.map);
             runtime.current?.identify(value.playerId);
+            runtime.current?.setQuality(quality);
             setStatus('Connesso');
             setConnecting(false);
           } catch (e) {
@@ -157,7 +163,7 @@ export default function Crossfire({ owner, paused, onAuthoritativeResult }: Game
           break;
         case 'frame':
           frame.current.set(message.values);
-          runtime.current?.frame(message.values);
+          runtime.current?.frame(message.values, message.lookSequence ?? 0);
           break;
         case 'remote':
           runtime.current?.remote(message.tick, message.values);
@@ -222,6 +228,9 @@ export default function Crossfire({ owner, paused, onAuthoritativeResult }: Game
         fps: runtime.current?.fps || 0,
         queue: v[22] || 0,
         tick: v[20] || 0,
+        frameMs: runtime.current?.frameMs ?? 0,
+        drawCalls: runtime.current?.drawCalls ?? 0,
+        scale: runtime.current?.resolutionScale ?? 1,
       });
     }, 100);
     return () => {
@@ -273,8 +282,8 @@ export default function Crossfire({ owner, paused, onAuthoritativeResult }: Game
     };
     const move = (e: MouseEvent) => {
       if (!document.pointerLockElement) return;
-      worker.current?.postMessage({ type: 'look', dx: e.movementX, dy: e.movementY });
-      runtime.current?.look(e.movementX, e.movementY);
+      const sequence = runtime.current?.look(e.movementX, e.movementY) ?? 0;
+      worker.current?.postMessage({ type: 'look', dx: e.movementX, dy: e.movementY, sequence });
     };
     const mouse = (e: MouseEvent) => {
       if (document.pointerLockElement !== runtime.current?.renderer.domElement) return;
@@ -317,7 +326,13 @@ export default function Crossfire({ owner, paused, onAuthoritativeResult }: Game
     own = players.find((p) => p.id === identity.current.id),
     isHost = lobby?.host === identity.current.key;
   return (
-    <div className="fps-game" onContextMenu={(e) => e.preventDefault()}>
+    <div
+      className="fps-game"
+      data-fps={Math.round(hud.fps)}
+      data-draw-calls={hud.drawCalls}
+      data-render-scale={hud.scale.toFixed(2)}
+      onContextMenu={(e) => e.preventDefault()}
+    >
       <div
         ref={host}
         className="fps-canvas"
@@ -329,7 +344,7 @@ export default function Crossfire({ owner, paused, onAuthoritativeResult }: Game
         <div className="fps-setup">
           <div className="eyebrow">CROSSFIRE / ARENA</div>
           <h2>Entra. Muoviti. Colpisci.</h2>
-          <p>6 armi · 2 mappe · server a 60 Hz</p>
+          <p>6 armi · 4 mappe · server a 60 Hz</p>
           <div className="fps-fields">
             <label>
               Mappa
@@ -338,8 +353,11 @@ export default function Crossfire({ owner, paused, onAuthoritativeResult }: Game
                 value={map}
                 onChange={(e) => setMap(e.target.value as typeof map)}
               >
-                <option value="nexus">Nexus · laboratorio neon</option>
-                <option value="sandstorm">Sandstorm · tunnel e container</option>
+                {ARENA_NAMES.map((id) => (
+                  <option key={id} value={id}>
+                    {ARENA_LABELS[id]}
+                  </option>
+                ))}
               </select>
             </label>
             <label>
@@ -522,6 +540,19 @@ export default function Crossfire({ owner, paused, onAuthoritativeResult }: Game
           )}
           <div className="fps-toolbar">
             <span role="status">{status}</span>
+            <select
+              aria-label="Qualità grafica FPS"
+              value={quality}
+              onChange={(e) => {
+                const value = e.target.value as typeof quality;
+                setQuality(value);
+                runtime.current?.setQuality(value);
+              }}
+            >
+              <option value="auto">Grafica · automatica</option>
+              <option value="performance">Fluidità</option>
+              <option value="quality">Qualità alta</option>
+            </select>
             <button onClick={() => setDebugPanel((v) => !v)}>F3 · Debug</button>
             <button
               onClick={() => {
@@ -540,7 +571,9 @@ export default function Crossfire({ owner, paused, onAuthoritativeResult }: Game
           <h3>Sessione #{identity.current.id || '—'}</h3>
           <p>{lobby?.debug ? 'DEBUG · risultati non classificati' : 'Sessione normale'}</p>
           <p>
-            {Math.round(hud.fps)} FPS · tick {hud.tick} · input in attesa {hud.queue}
+            {Math.round(hud.fps)} FPS · {hud.frameMs.toFixed(1)} ms · {hud.drawCalls} draw call ·
+            risoluzione {Math.round(hud.scale * 100)}% · tick {hud.tick} · input in attesa{' '}
+            {hud.queue}
           </p>
           {lobby?.debug && isHost && (
             <>

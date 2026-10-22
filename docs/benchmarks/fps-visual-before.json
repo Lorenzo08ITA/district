@@ -1,0 +1,14 @@
+{
+  "map": "nexus",
+  "driver": "Chromium headless / software WebGL",
+  "viewport": [
+    1440,
+    960
+  ],
+  "bots": 5,
+  "frames": 182,
+  "p50Ms": 33.30000000000018,
+  "p95Ms": 49.90000000000009,
+  "meanDrawCalls": 171,
+  "note": "Synthetic local capture; not a hardware GPU or internet-latency guarantee."
+}

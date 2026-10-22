@@ -16,6 +16,8 @@ it('keeps normal-path simulation and packet methods free of object creation', ()
     '../../../server/src/fps/History.ts': ['writePose', 'record', 'sample'],
     '../../../client/src/fps/Runtime.ts': ['render'],
     '../../../client/src/fps/Effects.ts': ['update'],
+    '../../../client/src/fps/Presentation.ts':['push','sample'],
+    '../../../client/src/fps/Backdrop.ts':['update'],
     '../../../client/src/fps/SecondOrderSpring3D.ts': ['update'],
     'arena.ts': ['choose'],
     'math.ts': ['accelerate', 'cast', 'rotate'],

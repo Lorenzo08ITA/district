@@ -4,6 +4,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { z } from 'zod';
 import { encodeWire, decodeWire, WireKind } from '@district/rts-shared';
 import {
+  ARENA_NAMES,
   HitConfirm,
   PacketReader,
   PacketBufferPool,
@@ -94,7 +95,7 @@ interface Peer {
   handling: boolean;
 }
 const configure = {
-  map: z.enum(['nexus', 'sandstorm']),
+  map: z.enum(ARENA_NAMES),
   mode: z.enum(['ffa', 'tdm', 'ctf', 'hardpoint']),
   debug: z.boolean(),
   tabId: z.string().uuid(),

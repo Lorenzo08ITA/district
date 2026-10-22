@@ -6,8 +6,8 @@ Verifiche eseguite il 22 ottobre 2026 su Windows, Node.js 24 e Chromium headless
 | ------------------------------------------ | ------------------------------------------------------ |
 | TypeScript                                 | Superato                                               |
 | Build Next.js ottimizzata                  | Superata                                               |
-| Test unitari/integrazione                  | 174 superati                                           |
-| Test browser desktop/mobile                | 19 superati                                            |
+| Test unitari/integrazione                  | 188 superati                                           |
+| Test browser desktop/mobile                | 21 superati                                            |
 | Test offline su build ottimizzata          | 2 superati                                             |
 | Dipendenze (`npm audit`)                   | Nessuna al controllo precedente; non ripetuto il 22/10 |
 | Due socket con partita e risultati salvati | Superato                                               |
@@ -63,3 +63,7 @@ Crossfire sostituito con il nuovo client/server: simulazione autoritativa 60 Hz,
 Renderer Three.js a doppia camera, PBR/PMREM, ottiche e scope 6×, molle analitiche per posizione/rotazione, braccia/personaggi articolati, effetti istanziati, audio sintetico HRTF, HUD e debug F3. I renderer software usano un percorso alleggerito; un test esercita anche quello completo. Verificati 59 test FPS, 174 test automatici totali, 19 browser e 2 offline. Build e TypeScript passati. Test reali con due account, due schede dello stesso account, movimento, armi, bot, scope/ricarica e risultati persistiti. Guardie AST estese ai cicli di simulazione server e rendering del client. [Documentazione FPS](FPS-STEP2-3.md).
 
 Verificata anche la nuova mappa mondiale di Frontier, con conquista, costruzione, salvataggio/ripresa e cloud. Il pacchetto sorgente include i dati geografici e la loro provenienza. Nessuna pubblicazione esterna: URL/hosting non forniti. Gli aggiornamenti a runner, guida, quiz e altri giochi restano separati da questo completamento FPS.
+
+## Aggiornamento visivo Crossfire
+
+Quattro mappe nel protocollo/lobby, aggiunte Bastione e Cedar con ingressi, finestre, livelli e rampe condivisi con la fisica. Nuovi dettagli su armi, guanti e operatori, materiali PBR procedurali, cielo/nuvole, mare, rilievi e vegetazione istanziata. Batching statico, interpolazione della camera, mira immediata con conferma del Worker, riconoscimento dei respawn, risoluzione adattiva e menu qualità. Nuovi test su geometria/spawn/percorsi, materiali, batching, atmosfera, presentazione e stanze WebSocket. [Dettagli e limiti delle misure](FPS-VISUALS.md).

@@ -9,7 +9,7 @@ npm ci
 npm run dev
 ```
 
-Aprire http://localhost:3000, accedere, scegliere Crossfire e premere Inizia. Partita rapida cerca una stanza compatibile; Crea lobby permette di scegliere Nexus/Sandstorm, modalità e 0–5 bot. Condividere il codice di sei caratteri tramite il pulsante Lobby. Il creatore avvia; nuovi giocatori possono entrare anche durante il round. Concludi e salva termina la partecipazione e attende il risultato persistito dal server.
+Aprire http://localhost:3000, accedere, scegliere Crossfire e premere Inizia. Partita rapida cerca una stanza compatibile; Crea lobby permette di scegliere Bastione/Cedar/Nexus/Sandstorm, modalità e 0–5 bot. Condividere il codice di sei caratteri tramite il pulsante Lobby. Il creatore avvia; nuovi giocatori possono entrare anche durante il round. Concludi e salva termina la partecipazione e attende il risultato persistito dal server.
 
 Per due account distinti usare profili browser separati. Per due schede dello stesso account, attivare **Debug in entrambe prima di collegarsi**: creare una lobby nella prima, inserire il codice nella seconda, avviare. Ogni connessione conserva un UUID di scheda in sessionStorage e nel Worker; le riconnessioni dello stesso Worker mantengono la stessa identità. Le schede duplicate ricevono un nuovo UUID al collegamento. Anche `?debug=true` preseleziona Debug; F3 prima del collegamento lo abilita. Il pannello F3 mostra FPS misurati, tick, input non confermati e permette al creatore di aggiungere Strafe Bot fino a cinque, con reazione 100–2000 ms. Le normali schede sullo stesso account nella stessa stanza si sostituiscono.
 
@@ -81,3 +81,7 @@ npm run test:offline
 I test FPS verificano geometria e movimento, armi/protocollo, replay Node/Worker, OBB storiche tra vite diverse, colpi/blocco muri/friendly fire, respawn, bandiere, hardpoint, bot deterministici, cadenza degli input, capienza e reset dei posti riusati, autenticazione/Origin, identità debug, permessi host, validazione e salvataggi verificati/non verificati. Il test browser usa due schede dello stesso account, lobby con codice, vero pointer lock, cambio arma, movimento, sparo, bot e due risultati nel database. Il test di due profili verifica anche il matchmaking normale.
 
 Nessuna promessa di 144 FPS costanti o latenza zero: servono misure su GPU/rete reali e collaudo di carico. L'architettura è a singola istanza Node persistente; PostgreSQL esterno, HTTPS/proxy, backup e deploy pubblico richiedono l'ambiente di destinazione. Il progetto non contiene una destinazione di pubblicazione configurata.
+
+## Aggiornamento visivo
+
+Ora sono disponibili quattro mappe, modelli rivisti, materiali procedurali, panorami e risoluzione adattiva. [Implementazione, misure e limiti](FPS-VISUALS.md).

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { SurfaceLibrary, batchStaticMeshes } from './Surfaces.js';
 import { WeaponId, type Arena } from '@district/rts-shared/fps';
 export interface WeaponRig {
   root: THREE.Group;
@@ -22,27 +23,19 @@ export interface CharacterRig {
 const lensVertex = `varying vec2 uvLens;varying vec3 viewPosition;void main(){uvLens=uv;vec4 p=modelViewMatrix*vec4(position,1.);viewPosition=p.xyz;gl_Position=projectionMatrix*p;}`;
 const lensFragment = `precision highp float;varying vec2 uvLens;varying vec3 viewPosition;uniform sampler2D scopeTexture;uniform float scoped;void main(){vec2 p=uvLens*2.-1.;if(length(p)>1.)discard;vec2 angular=viewPosition.xy/max(.01,-viewPosition.z);float dotLight=1.-smoothstep(.002,.004,length(angular));float ring=1.-smoothstep(.001,.002,abs(length(angular)-.018));vec3 glass=vec3(.02,.16,.18);if(scoped>.5){glass=texture2D(scopeTexture,uvLens).rgb;float crosshair=1.-smoothstep(.003,.006,min(abs(p.x),abs(p.y)));glass=mix(glass,vec3(.02),crosshair*.8);gl_FragColor=vec4(glass,1.);}else gl_FragColor=vec4(glass+vec3(2.8,.13,.03)*(dotLight+ring*.35),.36+dotLight*.64+ring*.3);}`;
 export class ProceduralWeaponFactory {
-  readonly metal = new THREE.MeshStandardMaterial({
-    color: 0x1a1d24,
-    metalness: 0.92,
-    roughness: 0.22,
-  });
-  readonly polymer = new THREE.MeshStandardMaterial({
-    color: 0x2b303c,
-    metalness: 0.15,
-    roughness: 0.75,
-  });
+  readonly surfaces = new SurfaceLibrary();
+  readonly metal = this.surfaces.material('steel', 0x43494d, 0.88, 0.32);
+  readonly polymer = this.surfaces.material('polymer', 0x333a3a, 0.05, 0.7);
+  readonly grip = this.surfaces.material('fabric', 0x252825, 0, 0.95);
+  readonly brass = this.surfaces.material('steel', 0xc49a52, 0.82, 0.3);
   readonly neon = new THREE.MeshStandardMaterial({
-    color: 0x00f0ff,
-    emissive: 0x00f0ff,
-    emissiveIntensity: 2.5,
+    color: 0x69bdd2,
+    emissive: 0x34859a,
+    emissiveIntensity: 1.3,
   });
-  readonly grip = new THREE.MeshStandardMaterial({ color: 0x11151c, roughness: 0.95 });
-  readonly brass = new THREE.MeshStandardMaterial({
-    color: 0xc6a569,
-    metalness: 0.85,
-    roughness: 0.3,
-  });
+  readonly cloth = this.surfaces.material('fabric', 0x4c5448, 0, 0.9);
+  readonly skin = new THREE.MeshStandardMaterial({ color: 0x9d765a, roughness: 0.82 });
+  readonly rubber = this.surfaces.material('polymer', 0x121515, 0, 0.98);
   private geometry = new Map<string, THREE.BufferGeometry>();
   rounded(w: number, h: number, d: number): THREE.BufferGeometry {
     const key = w + ':' + h + ':' + d;
@@ -123,7 +116,7 @@ export class ProceduralWeaponFactory {
         this.mesh(
           root,
           this.rounded(0.035, 0.012, 0.025),
-          i % 2 ? this.neon : this.grip,
+          i % 2 ? this.polymer : this.grip,
           0.0,
           -i * 0.013,
           0.03,
@@ -149,19 +142,76 @@ export class ProceduralWeaponFactory {
         stud.scale.y = 0.6;
       }
       muzzle.position.set(0, -0.12, -0.32);
+      batchStaticMeshes(root);
       return { root, magazine, bolt, drum, muzzle, lens: null };
     }
-    this.mesh(
-      root,
-      this.rounded(revolver ? 0.09 : 0.12, revolver ? 0.12 : 0.16, revolver ? 0.2 : 0.34),
-      this.polymer,
-      0,
-      0,
-      0,
-    );
+    const outline = long
+      ? [
+          [-0.16, 0.045],
+          [0.16, 0.045],
+          [0.16, -0.015],
+          [0.09, -0.035],
+          [-0.1, -0.06],
+          [-0.16, -0.035],
+        ]
+      : small
+        ? [
+            [-0.12, 0.06],
+            [0.13, 0.06],
+            [0.14, -0.02],
+            [0.04, -0.02],
+            [0.04, -0.1],
+            [-0.05, -0.1],
+            [-0.05, -0.04],
+            [-0.12, -0.04],
+          ]
+        : shotgun
+          ? [
+              [-0.16, 0.035],
+              [0.14, 0.035],
+              [0.14, -0.03],
+              [0.05, -0.05],
+              [-0.14, -0.06],
+              [-0.16, -0.035],
+            ]
+          : revolver
+            ? [
+                [-0.1, 0.05],
+                [0.06, 0.05],
+                [0.1, 0.02],
+                [0.065, -0.045],
+                [-0.02, -0.07],
+                [-0.08, -0.04],
+              ]
+            : [
+                [-0.17, 0.045],
+                [0.16, 0.045],
+                [0.175, 0.015],
+                [0.11, -0.035],
+                [0.03, -0.035],
+                [-0.01, -0.07],
+                [-0.1, -0.07],
+                [-0.115, -0.04],
+                [-0.17, -0.035],
+              ];
+    const silhouette = new THREE.Shape();
+    silhouette.moveTo(outline[0]![0]!, outline[0]![1]!);
+    for (let i = 1; i < outline.length; i++) silhouette.lineTo(outline[i]![0]!, outline[i]![1]!);
+    silhouette.closePath();
+    const receiver = new THREE.ExtrudeGeometry(silhouette, {
+      depth: revolver ? 0.075 : 0.085,
+      steps: 1,
+      bevelEnabled: true,
+      bevelSize: 0.003,
+      bevelThickness: 0.003,
+      bevelSegments: 2,
+    });
+    receiver.translate(0, 0, -(revolver ? 0.075 : 0.085) / 2);
+    receiver.rotateY(Math.PI / 2);
+    this.mesh(root, receiver, this.metal, 0, 0, 0);
     const barrel = this.mesh(
       root,
-      new THREE.CylinderGeometry(0.024, 0.028, barrelLength, 12),
+      new THREE.CylinderGeometry(long ? 0.016 : 0.012, long ? 0.022 : 0.017, barrelLength, 24),
       this.metal,
       0,
       0.025,
@@ -267,17 +317,19 @@ export class ProceduralWeaponFactory {
         tube.rotation.x = Math.PI / 2;
       }
     }
-    bolt.position.set(0.07, 0.03, 0.01);
+    bolt.position.set(0.052, 0.03, 0.01);
     this.mesh(bolt, this.rounded(0.018, 0.025, 0.13), this.metal, 0, 0, 0);
     this.mesh(bolt, new THREE.SphereGeometry(0.018, 8, 6), this.grip, 0.035, 0, 0.02);
     if (!revolver) {
+      this.mesh(root, this.rounded(0.075, 0.045, 0.26), this.metal, 0, 0.08, -0.015);
+      this.mesh(root, this.rounded(0.045, 0.045, 0.055), this.metal, 0, 0.112, -0.045);
       this.mesh(root, this.rounded(0.055, 0.045, 0.21), this.metal, 0, 0, 0.26);
       this.mesh(root, this.rounded(0.09, 0.18, 0.055), this.polymer, 0, -0.035, 0.38);
       for (let i = 0; i < 5; i++)
         this.mesh(root, this.rounded(0.13, 0.012, 0.026), this.metal, 0, 0.098, -0.13 + i * 0.055);
     }
-    this.mesh(root, this.rounded(0.014, 0.025, 0.12), this.neon, 0.063, 0.045, -0.02);
-    this.mesh(root, this.rounded(0.014, 0.012, 0.065), this.neon, -0.063, -0.025, 0.06);
+    this.mesh(root, this.rounded(0.014, 0.025, 0.12), this.metal, 0.063, 0.045, -0.02);
+    this.mesh(root, this.rounded(0.014, 0.012, 0.065), this.metal, -0.063, -0.025, 0.06);
     let lens: THREE.ShaderMaterial | null = null;
     if (!revolver) {
       this.mesh(root, this.rounded(0.075, 0.03, 0.13), this.metal, 0, 0.125, -0.045);
@@ -328,7 +380,90 @@ export class ProceduralWeaponFactory {
       );
       optic.castShadow = false;
     }
+    this.detailWeapon(root, id, viewmodel);
+    batchStaticMeshes(root);
     return { root, magazine, bolt, drum, muzzle, lens };
+  }
+  private detailWeapon(root: THREE.Group, id: WeaponId, full: boolean): void {
+    const sniper = id === WeaponId.Kraber,
+      smg = id === WeaponId.Vector,
+      shotgun = id === WeaponId.Cerberus,
+      revolver = id === WeaponId.Sheriff;
+    // Machined handguards, barrel shrouds and stock silhouette distinguish the weapon families.
+    if (!revolver) {
+      const length = sniper ? 0.42 : smg ? 0.18 : shotgun ? 0.3 : 0.28;
+      this.mesh(
+        root,
+        this.rounded(0.085, 0.095, length),
+        this.polymer,
+        0,
+        0.005,
+        -0.19 - length / 2,
+      );
+      for (let n = 0; n < (full ? 9 : 4); n++) {
+        const z = -0.22 - (n * length) / (full ? 9 : 4);
+        for (const side of [-1, 1]) {
+          this.mesh(root, this.rounded(0.004, 0.028, 0.015), this.rubber, side * 0.045, 0.025, z);
+          if (full)
+            this.mesh(root, this.rounded(0.004, 0.008, 0.012), this.metal, side * 0.048, -0.022, z);
+        }
+      }
+      if (sniper) {
+        for (const side of [-1, 1]) {
+          const leg = this.mesh(
+            root,
+            new THREE.CylinderGeometry(0.009, 0.011, 0.27, 8),
+            this.metal,
+            side * 0.065,
+            -0.14,
+            -0.57,
+          );
+          leg.rotation.z = side * 0.22;
+        }
+        this.mesh(root, this.rounded(0.12, 0.055, 0.2), this.grip, 0, 0.08, 0.22);
+      } else if (smg) {
+        this.mesh(root, this.rounded(0.07, 0.14, 0.1), this.polymer, 0, -0.105, -0.2);
+        this.mesh(root, this.rounded(0.035, 0.075, 0.19), this.metal, 0, -0.015, 0.23);
+      } else if (shotgun) {
+        const pump = this.mesh(
+          root,
+          new THREE.CylinderGeometry(0.045, 0.045, 0.2, 16),
+          this.grip,
+          0,
+          -0.025,
+          -0.39,
+        );
+        pump.rotation.x = Math.PI / 2;
+        for (let n = 0; n < 7; n++)
+          this.mesh(
+            root,
+            new THREE.TorusGeometry(0.046, 0.003, 5, 16),
+            this.polymer,
+            0,
+            -0.025,
+            -0.32 - n * 0.025,
+          );
+      }
+    }
+    this.mesh(root, this.rounded(0.006, 0.035, 0.085), this.rubber, 0.049, 0.016, -0.012);
+    this.mesh(root, this.rounded(0.008, 0.014, 0.04), this.metal, -0.052, -0.022, 0.06).rotation.x =
+      0.3;
+    if (full) {
+      for (const side of [-1, 1])
+        for (const z of [-0.1, 0.09]) {
+          const pin = this.mesh(
+            root,
+            new THREE.CylinderGeometry(0.005, 0.005, 0.004, 8),
+            this.brass,
+            side * 0.051,
+            -0.02,
+            z,
+          );
+          pin.rotation.z = Math.PI / 2;
+        }
+      for (let n = 0; n < 6; n++)
+        this.mesh(root, this.rounded(0.045, 0.003, 0.006), this.rubber, 0, -0.07 - n * 0.02, 0.13);
+    }
   }
   createCharacter(team: number): CharacterRig {
     const root = new THREE.Group(),
@@ -341,57 +476,88 @@ export class ProceduralWeaponFactory {
     root.add(head, chest, leftArm, rightArm, leftLeg, rightLeg);
     head.position.y = 1.63;
     chest.position.y = 1.24;
-    leftArm.position.set(-0.33, 1.34, 0);
-    rightArm.position.set(0.33, 1.34, 0);
-    leftLeg.position.set(-0.13, 0.8, 0);
-    rightLeg.position.set(0.13, 0.8, 0);
-    const armor = new THREE.MeshStandardMaterial({
-      color: team === 0 ? 0xb5d4dd : 0x9c8794,
-      metalness: 0.65,
-      roughness: 0.35,
-    });
-    this.mesh(head, new THREE.SphereGeometry(0.19, 16, 12), armor, 0, 0, 0).scale.set(
+    leftArm.position.set(-0.3, 1.37, 0);
+    rightArm.position.set(0.3, 1.37, 0);
+    leftLeg.position.set(-0.12, 0.8, 0);
+    rightLeg.position.set(0.12, 0.8, 0);
+    const armor = this.surfaces.material('fabric', team ? 0x82715c : 0x4c625d, 0, 0.86),
+      patch = new THREE.MeshStandardMaterial({
+        color: team ? 0xa94436 : 0x437f98,
+        roughness: 0.85,
+      });
+    this.mesh(head, new THREE.SphereGeometry(0.147, 20, 14), this.skin, 0, -0.01, -0.012).scale.set(
       1,
-      1.08,
-      0.95,
+      1.16,
+      0.94,
     );
-    const visor = this.mesh(
+    const helmet = this.mesh(
       head,
-      new THREE.SphereGeometry(0.174, 16, 8, 0, Math.PI * 2, Math.PI * 0.25, Math.PI * 0.45),
-      team === 0
-        ? this.neon
-        : new THREE.MeshStandardMaterial({
-            color: 0xff456b,
-            emissive: 0xff2348,
-            emissiveIntensity: 2,
-          }),
+      new THREE.SphereGeometry(0.166, 20, 12, 0, Math.PI * 2, 0, Math.PI * 0.63),
+      armor,
       0,
-      0.025,
-      -0.035,
+      0.055,
+      0.005,
     );
-    visor.scale.z = 1.08;
-    this.mesh(chest, new THREE.CapsuleGeometry(0.225, 0.27, 6, 12), armor, 0, -0.02, 0).scale.z =
-      0.7;
-    this.mesh(root, new THREE.CapsuleGeometry(0.2, 0.12, 6, 12), this.grip, 0, 0.9, 0).scale.z =
-      0.75;
+    helmet.scale.z = 1.06;
+    this.mesh(head, this.rounded(0.26, 0.012, 0.2), armor, 0, 0.075, -0.055);
+    this.mesh(head, this.rounded(0.245, 0.05, 0.04), this.rubber, 0, 0.003, -0.148);
+    this.mesh(head, this.rounded(0.22, 0.034, 0.007), this.metal, 0, 0.006, -0.172);
+    this.mesh(
+      head,
+      new THREE.CapsuleGeometry(0.109, 0.075, 5, 12),
+      this.grip,
+      0,
+      -0.082,
+      -0.035,
+    ).scale.z = 0.8;
+    this.mesh(root, new THREE.CylinderGeometry(0.06, 0.07, 0.11, 12), this.skin, 0, 1.48, 0);
+    this.mesh(
+      chest,
+      new THREE.CapsuleGeometry(0.22, 0.27, 6, 14),
+      this.cloth,
+      0,
+      -0.01,
+      0,
+    ).scale.z = 0.67;
+    this.mesh(chest, this.rounded(0.41, 0.38, 0.095), armor, 0, -0.025, -0.14);
+    this.mesh(chest, this.rounded(0.35, 0.35, 0.085), armor, 0, -0.025, 0.14);
+    for (const x of [-0.13, 0, 0.13]) {
+      this.mesh(chest, this.rounded(0.105, 0.17, 0.06), armor, x, -0.075, -0.205);
+      this.mesh(chest, this.rounded(0.085, 0.012, 0.065), this.grip, x, 0.01, -0.208);
+    }
+    for (const x of [-0.16, 0.16])
+      this.mesh(chest, this.rounded(0.045, 0.12, 0.18), armor, x, 0.19, 0);
+    this.mesh(chest, this.rounded(0.2, 0.06, 0.012), patch, 0, 0.115, -0.192);
+    this.mesh(root, new THREE.CapsuleGeometry(0.18, 0.1, 6, 12), this.cloth, 0, 0.89, 0).scale.z =
+      0.72;
+    this.mesh(root, this.rounded(0.38, 0.04, 0.24), this.grip, 0, 0.89, 0);
     for (const arm of [leftArm, rightArm]) {
-      this.mesh(arm, new THREE.CapsuleGeometry(0.085, 0.25, 4, 10), armor, 0, -0.16, 0);
+      this.mesh(arm, new THREE.CapsuleGeometry(0.075, 0.22, 5, 12), this.cloth, 0, -0.15, 0);
+      this.mesh(arm, new THREE.SphereGeometry(0.08, 12, 8), armor, 0, -0.045, 0);
       const forearm = this.mesh(
         arm,
-        new THREE.CapsuleGeometry(0.075, 0.24, 4, 10),
-        this.polymer,
+        new THREE.CapsuleGeometry(0.063, 0.19, 5, 12),
+        this.cloth,
         0,
-        -0.29,
-        -0.12,
+        -0.32,
+        -0.105,
       );
-      forearm.rotation.x = -1;
-      this.mesh(arm, new THREE.SphereGeometry(0.075, 8, 6), this.neon, 0, -0.3, -0.28);
+      forearm.rotation.x = -0.9;
+      this.mesh(arm, new THREE.SphereGeometry(0.065, 12, 8), this.grip, 0, -0.36, -0.23).scale.set(
+        0.8,
+        1,
+        1.15,
+      );
+      this.mesh(arm, this.rounded(0.09, 0.055, 0.015), patch, 0, -0.06, -0.08);
     }
     for (const leg of [leftLeg, rightLeg]) {
-      this.mesh(leg, new THREE.CapsuleGeometry(0.095, 0.28, 4, 10), armor, 0, -0.18, 0);
-      this.mesh(leg, new THREE.CapsuleGeometry(0.08, 0.27, 4, 10), this.polymer, 0, -0.55, 0);
-      this.mesh(leg, this.rounded(0.15, 0.09, 0.28), this.grip, 0, -0.76, -0.06);
+      this.mesh(leg, new THREE.CapsuleGeometry(0.09, 0.26, 5, 12), this.cloth, 0, -0.16, 0);
+      this.mesh(leg, new THREE.CapsuleGeometry(0.073, 0.25, 5, 12), this.cloth, 0, -0.53, 0);
+      this.mesh(leg, this.rounded(0.12, 0.12, 0.055), armor, 0, -0.36, -0.066);
+      this.mesh(leg, this.rounded(0.14, 0.12, 0.24), this.grip, 0, -0.73, -0.045);
+      this.mesh(leg, this.rounded(0.145, 0.035, 0.25), this.rubber, 0, -0.795, -0.045);
     }
+    batchStaticMeshes(root);
     const gun = this.create(WeaponId.Vanguard, false).root;
     gun.position.set(0.18, 1.22, -0.31);
     gun.scale.setScalar(0.7);
@@ -401,27 +567,31 @@ export class ProceduralWeaponFactory {
   buildArena(arena: Arena): THREE.Group {
     const root = new THREE.Group(),
       desert = arena.name === 'sandstorm',
-      white = new THREE.MeshStandardMaterial({
-        color: desert ? 0xb8986c : 0xc5d4dc,
-        metalness: desert ? 0.25 : 0.6,
-        roughness: 0.48,
-      }),
-      floor = new THREE.MeshStandardMaterial({
-        color: desert ? 0x77614c : 0x26333d,
-        metalness: 0.45,
-        roughness: 0.32,
-      }),
-      dark = new THREE.MeshStandardMaterial({
-        color: desert ? 0x444349 : 0x172737,
-        metalness: 0.7,
-        roughness: 0.36,
-      }),
-      container = new THREE.MeshStandardMaterial({
-        color: 0x936746,
-        metalness: 0.65,
-        roughness: 0.65,
-      }),
-      materials = [white, floor, dark, container];
+      town = arena.name === 'cedar' || arena.name === 'bastion',
+      cedar = arena.name === 'cedar',
+      coast = arena.name === 'bastion';
+    const materials = [
+      this.surfaces.material('stone', desert ? 0xb89d77 : 0xb3b9b5, 0, 0.8),
+      this.surfaces.material(
+        cedar ? 'grass' : coast ? 'stone' : 'asphalt',
+        cedar ? 0x718057 : coast ? 0xb4a28a : desert ? 0x8c775e : 0x42494b,
+        0,
+        0.9,
+      ),
+      this.surfaces.material('steel', 0x414b4f, 0.65, 0.55),
+      this.surfaces.material('steel', 0x826a52, 0.4, 0.65),
+      this.surfaces.material('plaster', 0xd6b78c),
+      this.surfaces.material('siding', 0x6c98a7),
+      this.surfaces.material('roof', cedar ? 0x7d5f52 : 0xb17051),
+      this.surfaces.material('brick', 0x8a8071),
+      this.surfaces.material('fence', 0x9d9f92),
+      this.surfaces.material('steel', 0xd9a647, 0.45, 0.5),
+      this.surfaces.material('siding', 0xbba37e),
+      this.surfaces.material('wood', 0x7e654d),
+      this.surfaces.material('steel', 0x294044, 0.8, 0.15),
+      this.surfaces.material('asphalt', 0x5b6060),
+    ];
+    materials[6]!.side = THREE.DoubleSide;
     const records = arena.surfaces;
     for (let i = 0; i < records.length; i += 8) {
       const x = records[i]!,
@@ -433,7 +603,7 @@ export class ProceduralWeaponFactory {
         kind = records[i + 6]!,
         material = materials[records[i + 7]!]!;
       if (kind === 0) {
-        const mesh = this.mesh(
+        this.mesh(
           root,
           this.rounded(X - x, Y - y, Z - z),
           material,
@@ -441,135 +611,196 @@ export class ProceduralWeaponFactory {
           (y + Y) / 2,
           (z + Z) / 2,
         );
-        if (Y - y > 0.5 && Y > 0) {
-          const trim = this.mesh(
+        if (!town && arena.name === 'nexus' && Y - y > 0.8 && Y > 0)
+          this.mesh(
             root,
-            this.rounded(X - x + 0.02, 0.035, Z - z + 0.02),
+            this.rounded(X - x + 0.01, 0.018, Z - z + 0.01),
             this.neon,
             (x + X) / 2,
-            Y + 0.02,
+            Y + 0.01,
             (z + Z) / 2,
           );
-          trim.castShadow = false;
-          if (Y - y > 1.8) {
-            for (let panel = 0; panel < Math.min(8, Math.floor((X - x) / 1.8)); panel++)
-              this.mesh(
-                root,
-                this.rounded(0.035, Math.min(2, Y - y - 0.2), 0.025),
-                dark,
-                x + 0.5 + panel * 1.7,
-                (y + Y) / 2,
-                Z + 0.025,
-              );
-          }
-        }
-        mesh.receiveShadow = true;
       } else {
         const lo = kind === 2 ? Y : y,
           hi = kind === 2 ? y : Y,
-          positions = new Float32Array([
-            x,
-            lo,
-            z,
-            x,
-            hi,
-            Z,
-            X,
-            hi,
-            Z,
-            x,
-            lo,
-            z,
-            X,
-            hi,
-            Z,
-            X,
-            lo,
-            z,
-          ]),
           g = new THREE.BufferGeometry();
-        g.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        g.setAttribute(
+          'position',
+          new THREE.Float32BufferAttribute(
+            [x, lo, z, x, hi, Z, X, hi, Z, x, lo, z, X, hi, Z, X, lo, z],
+            3,
+          ),
+        );
+        g.setAttribute(
+          'uv',
+          new THREE.Float32BufferAttribute([x, z, x, Z, X, Z, x, z, X, Z, X, z], 2),
+        );
         g.computeVertexNormals();
-        this.mesh(root, g, white, 0, 0, 0).material = new THREE.MeshStandardMaterial({
-          color: desert ? 0x96754e : 0x708794,
-          metalness: 0.6,
-          roughness: 0.35,
-          side: THREE.DoubleSide,
-        });
-        for (const edge of [x, X]) {
-          const rail = this.mesh(
-            root,
-            new THREE.CylinderGeometry(0.04, 0.04, Math.hypot(Z - z, Y - y), 8),
-            this.neon,
-            edge,
-            (y + Y) / 2 + 0.05,
-            (z + Z) / 2,
-          );
-          rail.rotation.x = Math.atan2(Z - z, hi - lo);
-        }
+        this.mesh(root, g, town && y > 5 ? materials[6]! : materials[0]!, 0, 0, 0);
       }
     }
-    for (let i = 0; i < arena.pads.records.length; i += 9) {
-      const p = arena.pads.records,
-        ring = this.mesh(
-          root,
-          new THREE.TorusGeometry(1.6, 0.09, 8, 48),
-          this.neon,
-          (p[i]! + p[i + 3]!) / 2,
-          0.06,
-          (p[i + 2]! + p[i + 5]!) / 2,
-        );
-      ring.rotation.x = Math.PI / 2;
-      this.mesh(
-        root,
-        new THREE.CylinderGeometry(1.6, 1.8, 0.1, 32),
-        dark,
-        ring.position.x,
-        0,
-        ring.position.z,
-      );
-    }
-    for (const side of [-1, 1])
-      for (const z of [-28, 28]) {
-        const tower = this.mesh(
-          root,
-          new THREE.CylinderGeometry(1.5, 2.2, 7, 16),
-          dark,
-          side * 39,
-          3.5,
-          z,
-        );
+    if (town) {
+      for (const cx of [-24, 24]) {
+        const framing = cedar ? materials[10]! : materials[7]!;
+        for (const wallZ of [-8.05, 8.05])
+          for (const level of [0, 3.2])
+            for (const side of [-1, 1]) {
+              const center = cx + side * 4.8;
+              this.mesh(root, this.rounded(3.3, 0.1, 0.42), framing, center, level + 1.1, wallZ);
+              this.mesh(root, this.rounded(3.3, 0.12, 0.35), framing, center, level + 2.4, wallZ);
+              for (const edge of [-1.6, 1.6])
+                this.mesh(
+                  root,
+                  this.rounded(0.1, 1.3, 0.35),
+                  framing,
+                  center + edge,
+                  level + 1.75,
+                  wallZ,
+                );
+            }
+        for (const x of [cx - 6.8, cx + 6.8])
+          this.mesh(root, new THREE.CylinderGeometry(0.06, 0.06, 3, 10), this.metal, x, 1.5, 10.7);
+        this.mesh(root, this.rounded(13.6, 0.07, 0.08), this.metal, cx, 4.2, 10.8);
+        for (let n = 0; n < 18; n++)
+          this.mesh(
+            root,
+            new THREE.CylinderGeometry(0.025, 0.025, 0.9, 6),
+            this.metal,
+            cx - 6.4 + n * 0.75,
+            3.7,
+            10.8,
+          );
+        // Interior partitions, floor-level skirting and roof fascia use the authored building footprint.
+        for (const y of [0.2, 3.4, 6.15])
+          for (const z of [-8.15, 8.15])
+            this.mesh(root, this.rounded(14.4, 0.12, 0.13), framing, cx, y, z);
+      }
+      if (cedar) {
+        const glass = materials[12]!;
+        for (const x of [-2.61, 2.61]) {
+          this.mesh(root, this.rounded(0.04, 0.85, 7.7), glass, x, 1.72, 0.5);
+          for (let n = 0; n < 7; n++)
+            this.mesh(
+              root,
+              this.rounded(0.065, 0.92, 0.045),
+              materials[9]!,
+              x,
+              1.72,
+              -3.05 + n * 1.14,
+            );
+          for (const z of [-2.7, 3.6]) {
+            const tire = this.mesh(
+              root,
+              new THREE.CylinderGeometry(0.55, 0.55, 0.3, 20),
+              this.rubber,
+              x,
+              0.55,
+              z,
+            );
+            tire.rotation.z = Math.PI / 2;
+            const hub = this.mesh(
+              root,
+              new THREE.CylinderGeometry(0.29, 0.29, 0.31, 16),
+              this.metal,
+              x,
+              0.55,
+              z,
+            );
+            hub.rotation.z = Math.PI / 2;
+          }
+          this.mesh(root, this.rounded(0.08, 0.07, 8.5), this.rubber, x, 0.96, 0.5);
+        }
+        for (const z of [-4.02, 5.02]) {
+          this.mesh(root, this.rounded(4.4, 0.85, 0.04), glass, 0, 1.75, z);
+          for (const x of [-1.8, 1.8])
+            this.mesh(root, new THREE.SphereGeometry(0.13, 12, 8), this.brass, x, 0.85, z);
+        }
+        this.mesh(root, this.rounded(5.15, 0.16, 8.95), materials[9]!, 0, 2.67, 0.5);
+        this.mesh(root, this.rounded(2.2, 0.5, 2.5), materials[12]!, 0, 1.3, -17.5);
+        for (const x of [-1.24, 1.24])
+          for (const z of [-19, -16])
+            this.mesh(
+              root,
+              new THREE.CylinderGeometry(0.35, 0.35, 0.2, 16),
+              this.rubber,
+              x,
+              0.35,
+              z,
+            ).rotation.z = Math.PI / 2;
+        for (const x of [-5.8, 5.8])
+          for (let z = -29; z < 30; z += 5)
+            this.mesh(root, this.rounded(0.1, 0.012, 2.6), materials[10]!, x, 0.035, z);
+      } else {
+        for (const cx of [-12, 12])
+          for (const z of [-19, 17]) {
+            const canvas = new THREE.MeshStandardMaterial({
+              color: cx < 0 ? 0x8a6249 : 0x8a9281,
+              roughness: 0.95,
+            });
+            this.mesh(root, this.rounded(4.6, 0.06, 3), canvas, cx, 2.65, z);
+            for (const dx of [-1.8, 1.8])
+              this.mesh(
+                root,
+                new THREE.CylinderGeometry(0.035, 0.035, 2.5, 8),
+                materials[11]!,
+                cx + dx,
+                1.25,
+                z - 1.2,
+              );
+            for (let n = 0; n < 4; n++)
+              this.mesh(
+                root,
+                new THREE.SphereGeometry(0.13, 8, 5),
+                n % 2 ? this.brass : materials[10]!,
+                cx - 1 + n * 0.65,
+                1.25,
+                z,
+              );
+          }
+      }
+    } else {
+      for (let i = 0; i < arena.pads.records.length; i += 9) {
+        const p = arena.pads.records,
+          ring = this.mesh(
+            root,
+            new THREE.TorusGeometry(1.6, 0.06, 8, 32),
+            this.neon,
+            (p[i]! + p[i + 3]!) / 2,
+            0.08,
+            (p[i + 2]! + p[i + 5]!) / 2,
+          );
+        ring.rotation.x = Math.PI / 2;
         this.mesh(
           root,
-          new THREE.TorusGeometry(1.52, 0.06, 8, 32),
-          this.neon,
-          tower.position.x,
-          6,
-          z,
-        ).rotation.x = Math.PI / 2;
-        const dish = this.mesh(
-          root,
-          new THREE.SphereGeometry(1, 16, 8, 0, Math.PI * 2, 0, Math.PI * 0.5),
-          white,
-          side * 39,
-          7.3,
-          z,
+          new THREE.CylinderGeometry(1.6, 1.8, 0.1, 24),
+          materials[2]!,
+          ring.position.x,
+          0,
+          ring.position.z,
         );
-        dish.rotation.z = side * 0.5;
       }
-    if (desert) {
-      for (let i = 0; i < 15; i++) {
-        const dune = this.mesh(
-          root,
-          new THREE.SphereGeometry(8 + (i % 3), 12, 6),
-          container,
-          -55 + (i % 5) * 26,
-          -3,
-          ((i / 5) | 0) * 48 - 48,
-        );
-        dune.scale.y = 0.5;
-      }
+      for (const side of [-1, 1])
+        for (const z of [-28, 28]) {
+          this.mesh(
+            root,
+            new THREE.CylinderGeometry(1.5, 2.2, 7, 16),
+            materials[2]!,
+            side * 39,
+            3.5,
+            z,
+          );
+          const dish = this.mesh(
+            root,
+            new THREE.SphereGeometry(1, 16, 8, 0, Math.PI * 2, 0, Math.PI * 0.5),
+            materials[0]!,
+            side * 39,
+            7.3,
+            z,
+          );
+          dish.rotation.z = side * 0.5;
+        }
     }
+    batchStaticMeshes(root);
     return root;
   }
 }

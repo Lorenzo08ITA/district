@@ -1,7 +1,14 @@
 import { WorldBuilder } from './bvh.js';
 import { JumpPads } from './kinematics.js';
 import { Vec3, RayHit } from './math.js';
-export type ArenaName = 'nexus' | 'sandstorm';
+export const ARENA_NAMES = ['nexus', 'sandstorm', 'bastion', 'cedar'] as const;
+export type ArenaName = (typeof ARENA_NAMES)[number];
+export const ARENA_LABELS: Record<ArenaName, string> = {
+  nexus: 'Nexus · laboratorio alpino',
+  sandstorm: 'Sandstorm · avamposto desertico',
+  bastion: 'Bastione · costa mediterranea',
+  cedar: 'Cedar · quartiere tattico',
+};
 export type GameMode = 'ffa' | 'tdm' | 'ctf' | 'hardpoint';
 export const MAX_FPS_PLAYERS = 12;
 export interface Arena {
@@ -16,7 +23,7 @@ export interface Arena {
 }
 /** Every visible solid and ramp is authored once for both collision and rendering. */
 export function createArena(name: ArenaName): Arena {
-  if (name !== 'nexus' && name !== 'sandstorm') throw new RangeError('Unknown arena');
+  if (!ARENA_NAMES.includes(name)) throw new RangeError('Unknown arena');
   const data: number[] = [],
     geometry = new WorldBuilder();
   function box(x: number, y: number, z: number, X: number, Y: number, Z: number, material = 0) {
@@ -36,93 +43,162 @@ export function createArena(name: ArenaName): Arena {
     if (reverse) geometry.quad(x, hi, z, x, lo, Z, X, lo, Z, X, hi, z);
     else geometry.ramp(x, z, X, Z, lo, hi);
   }
-  if (name === 'nexus') box(-43, -1, -33, 43, 0, 33, 1);
-  else {
-    box(-43, -1, -33, -5, 0, 33, 1);
-    box(5, -1, -33, 43, 0, 33, 1);
-    box(-5, -1, -33, 5, 0, -22, 1);
-    box(-5, -1, 22, 5, 0, 33, 1);
-    box(-5, -4, -22, 5, -3, 22, 1);
-    ramp(-5, 12, 5, 22, -3, 0);
-    ramp(-5, -22, 5, -12, -3, 0, true);
-    box(-5, -1.6, -8, 5, 0.8, 8, 3);
-  }
-  box(-44, 0, -34, -42, 8, 34, 2);
-  box(42, 0, -34, 44, 8, 34, 2);
-  box(-44, 0, -34, 44, 8, -32, 2);
-  box(-44, 0, 32, 44, 8, 34, 2);
-  for (const side of [-1, 1]) {
-    for (const z of [-15, 8]) {
-      const x = side * 23;
-      box(x - 2, 0, z - 2, x + 2, 1.05, z + 2, name === 'nexus' ? 0 : 3);
-      box(x + side * 5 - 1, 0, z + 5, x + side * 5 + 1, 2.4, z + 7, 2);
-    }
-    box(side < 0 ? -15 : 12, 0, -10, side < 0 ? -12 : 15, 4, -2, 0);
-    box(side < 0 ? -15 : 12, 0, 2, side < 0 ? -12 : 15, 4, 10, 0);
-    const x = side < 0 ? -35 : 29;
-    ramp(x, -9, x + 6, 9, 0, 3.6);
-    box(x, 3.25, 9, x + 6, 3.6, 15, 1);
-  }
-  if (name === 'nexus') {
-    box(-12, 3.25, -2, 12, 3.6, 2, 1);
-    ramp(-12, -15, -6, -2, 0, 3.6);
-    ramp(6, 2, 12, 15, 0, 3.6, true);
-    box(-2, 0, -17, 2, 1.1, -14, 2);
-    box(-2, 0, 14, 2, 1.1, 17, 2);
-  } else {
-    box(-27, 0, -3, -19, 2.4, 1, 3);
-    box(19, 0, -1, 27, 2.4, 3, 3);
-  }
-  // Radar towers use the same sixteen-sided frustum as the visual mesh.
-  for (const side of [-1, 1])
-    for (const z of [-28, 28])
-      for (let n = 0; n < 16; n++) {
-        const a = (n * Math.PI) / 8,
-          b = ((n + 1) * Math.PI) / 8,
-          cx = side * 39;
-        geometry.quad(
-          cx + Math.sin(a) * 2.2,
-          0,
-          z + Math.cos(a) * 2.2,
-          cx + Math.sin(a) * 1.5,
-          7,
-          z + Math.cos(a) * 1.5,
-          cx + Math.sin(b) * 1.5,
-          7,
-          z + Math.cos(b) * 1.5,
-          cx + Math.sin(b) * 2.2,
-          0,
-          z + Math.cos(b) * 2.2,
-        );
-        geometry.triangle(
-          cx,
-          7,
-          z,
-          cx + Math.sin(a) * 1.5,
-          7,
-          z + Math.cos(a) * 1.5,
-          cx + Math.sin(b) * 1.5,
-          7,
-          z + Math.cos(b) * 1.5,
-        );
+  const town = name === 'bastion' || name === 'cedar';
+  if (town) {
+    box(-43, -1, -33, 43, 0, 33, 1);
+    box(-43, 0, -33, -42.5, 3, 33, 8);
+    box(42.5, 0, -33, 43, 3, 33, 8);
+    box(-43, 0, -33, 43, 3, -32.5, 8);
+    box(-43, 0, 32.5, 43, 3, 33, 8);
+    function house(cx: number, material: number) {
+      const x = cx - 7,
+        X = cx + 7,
+        z = -8,
+        Z = 8;
+      box(x, 0, z, X, 0.12, Z, 7);
+      box(x, 3.05, z, X, 3.2, Z, 11);
+      for (const level of [0, 3.2]) {
+        for (const wall of [z, Z - 0.3]) {
+          box(x, level, wall, cx - 1.25, level + 1.1, wall + 0.3, material);
+          box(cx + 1.25, level, wall, X, level + 1.1, wall + 0.3, material);
+          box(x, level + 1.1, wall, x + 1.2, level + 2.4, wall + 0.3, material);
+          box(cx - 2.6, level + 1.1, wall, cx - 1.25, level + 2.4, wall + 0.3, material);
+          box(cx + 1.25, level + 1.1, wall, cx + 2.6, level + 2.4, wall + 0.3, material);
+          box(X - 1.2, level + 1.1, wall, X, level + 2.4, wall + 0.3, material);
+          box(x, level + 2.4, wall, X, level + 3.05, wall + 0.3, material);
+        }
+        box(x, level, z, x + 0.3, level + 3.05, Z, material);
+        box(X - 0.3, level, z, X, level + 3.05, Z, material);
       }
+      box(x, 3.05, 8, X, 3.2, 11, 11);
+      const stairX = cx < 0 ? x - 3 : X;
+      ramp(stairX, -10, stairX + 3, 9, 0, 3.2);
+      box(stairX, 3.05, 9, stairX + 3, 3.2, 11, 11);
+      if (name === 'cedar') {
+        ramp(x - 0.4, -8.5, X + 0.4, 0, 6.25, 8);
+        ramp(x - 0.4, 0, X + 0.4, 8.5, 6.25, 8, true);
+      } else {
+        box(x - 0.35, 6.25, -8.35, X + 0.35, 6.45, 8.35, 6);
+        box(x, 6.45, z, x + 0.25, 7, Z, 4);
+        box(X - 0.25, 6.45, z, X, 7, Z, 4);
+      }
+    }
+    house(-24, name === 'cedar' ? 5 : 4);
+    house(24, name === 'cedar' ? 10 : 4);
+    if (name === 'cedar') {
+      box(-6, 0.001, -32, 6, 0.018, 32, 13);
+      box(-2.6, 0, -4, 2.6, 2.65, 5, 9);
+      box(-1.2, 0, -20, 1.2, 1.3, -15, 10);
+      for (const side of [-1, 1]) {
+        box(side < 0 ? -17 : 10, 0, 17, side < 0 ? -10 : 17, 0.8, 21, 7);
+        box(side < 0 ? -40 : 36, 0, -14, side < 0 ? -36 : 40, 1.3, -10, 11);
+      }
+    } else {
+      box(-10, 3.15, -2, 10, 3.45, 2, 7);
+      ramp(-10, -15, -6, -2, 0, 3.45);
+      ramp(6, 2, 10, 15, 0, 3.45, true);
+      box(-1.8, 0, -12, 1.8, 1.1, -8.4, 7);
+      for (const side of [-1, 1])
+        for (const z of [-19, 17]) {
+          const x = side * 12;
+          box(x - 2, 0, z - 1, x + 2, 1.1, z + 1, 11);
+          box(x - 2.3, 2.5, z - 1.5, x + 2.3, 2.6, z + 1.5, 6);
+        }
+    }
+  } else {
+    if (name === 'nexus') box(-43, -1, -33, 43, 0, 33, 1);
+    else {
+      box(-43, -1, -33, -5, 0, 33, 1);
+      box(5, -1, -33, 43, 0, 33, 1);
+      box(-5, -1, -33, 5, 0, -22, 1);
+      box(-5, -1, 22, 5, 0, 33, 1);
+      box(-5, -4, -22, 5, -3, 22, 1);
+      ramp(-5, 12, 5, 22, -3, 0);
+      ramp(-5, -22, 5, -12, -3, 0, true);
+      box(-5, -1.6, -8, 5, 0.8, 8, 3);
+    }
+    box(-44, 0, -34, -42, 8, 34, 2);
+    box(42, 0, -34, 44, 8, 34, 2);
+    box(-44, 0, -34, 44, 8, -32, 2);
+    box(-44, 0, 32, 44, 8, 34, 2);
+    for (const side of [-1, 1]) {
+      for (const z of [-15, 8]) {
+        const x = side * 23;
+        box(x - 2, 0, z - 2, x + 2, 1.05, z + 2, name === 'nexus' ? 0 : 3);
+        box(x + side * 5 - 1, 0, z + 5, x + side * 5 + 1, 2.4, z + 7, 2);
+      }
+      box(side < 0 ? -15 : 12, 0, -10, side < 0 ? -12 : 15, 4, -2, 0);
+      box(side < 0 ? -15 : 12, 0, 2, side < 0 ? -12 : 15, 4, 10, 0);
+      const x = side < 0 ? -35 : 29;
+      ramp(x, -9, x + 6, 9, 0, 3.6);
+      box(x, 3.25, 9, x + 6, 3.6, 15, 1);
+    }
+    if (name === 'nexus') {
+      box(-12, 3.25, -2, 12, 3.6, 2, 1);
+      ramp(-12, -15, -6, -2, 0, 3.6);
+      ramp(6, 2, 12, 15, 0, 3.6, true);
+      box(-2, 0, -17, 2, 1.1, -14, 2);
+      box(-2, 0, 14, 2, 1.1, 17, 2);
+    } else {
+      box(-27, 0, -3, -19, 2.4, 1, 3);
+      box(19, 0, -1, 27, 2.4, 3, 3);
+    }
+    // Radar towers use the same sixteen-sided frustum as the visual mesh.
+    for (const side of [-1, 1])
+      for (const z of [-28, 28])
+        for (let n = 0; n < 16; n++) {
+          const a = (n * Math.PI) / 8,
+            b = ((n + 1) * Math.PI) / 8,
+            cx = side * 39;
+          geometry.quad(
+            cx + Math.sin(a) * 2.2,
+            0,
+            z + Math.cos(a) * 2.2,
+            cx + Math.sin(a) * 1.5,
+            7,
+            z + Math.cos(a) * 1.5,
+            cx + Math.sin(b) * 1.5,
+            7,
+            z + Math.cos(b) * 1.5,
+            cx + Math.sin(b) * 2.2,
+            0,
+            z + Math.cos(b) * 2.2,
+          );
+          geometry.triangle(
+            cx,
+            7,
+            z,
+            cx + Math.sin(a) * 1.5,
+            7,
+            z + Math.cos(a) * 1.5,
+            cx + Math.sin(b) * 1.5,
+            7,
+            z + Math.cos(b) * 1.5,
+          );
+        }
+  }
   const spawns: number[] = [];
-  for (const z of [-27, 27]) for (const x of [-31, -12, 12, 31]) spawns.push(x, 0.01, z);
+  for (const z of [-27, 27])
+    for (const x of town ? [-36, -8, 8, 36] : [-31, -12, 12, 31]) spawns.push(x, 0.01, z);
   const waypoints: number[] = [];
   for (const z of [-26, -19, -8, 0, 8, 19, 26])
     for (const x of [-36, -24, -8, 0, 8, 24, 36]) {
       if (name === 'sandstorm' && x === 0 && Math.abs(z) < 19) waypoints.push(x, -2.99, z);
       else waypoints.push(x, 0.01, z);
     }
-  const pads = new JumpPads([
-    -38, -0.05, -22, -34, 0.3, -18, 0, 14, 14, 34, -0.05, 18, 38, 0.3, 22, 0, 14, -14,
-  ]);
+  const pads = new JumpPads(
+    town ? [] : [-38, -0.05, -22, -34, 0.3, -18, 0, 14, 14, 34, -0.05, 18, 38, 0.3, 22, 0, 14, -14],
+  );
   return {
     name,
     surfaces: new Float64Array(data),
     spawns: new Float64Array(spawns),
     waypoints: new Float64Array(waypoints),
-    hardpoints: new Float64Array([-24, 0, 0, 24, 0, 0, 0, name === 'sandstorm' ? -3 : 0, 18]),
+    hardpoints: new Float64Array(
+      name === 'cedar'
+        ? [-24, 3.2, 0, 24, 3.2, 0, 0, 0, 12]
+        : [-24, 0, 0, 24, 0, 0, 0, name === 'sandstorm' ? -3 : 0, 18],
+    ),
     flags: new Float64Array([0, 0.01, 27, 0, 0.01, -27]),
     world: geometry.build(),
     pads,
