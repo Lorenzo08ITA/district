@@ -1,0 +1,40 @@
+{
+  "map": [2000, 2000],
+  "ticks": 600,
+  "initializationMs": 489.0416,
+  "averageTickMs": 0.12484849999999786,
+  "p95TickMs": 0.27519999999992706,
+  "maxTickMs": 23.62110000000007,
+  "events": {
+    "built": 8,
+    "spawned": 18,
+    "launched": 352,
+    "income": 16,
+    "arrived": 13,
+    "detonated": 303,
+    "intercepted": 1,
+    "destroyed": 2
+  },
+  "remaining": {
+    "buildings": 8,
+    "units": 3,
+    "missiles": 46
+  },
+  "players": [
+    {
+      "id": 1,
+      "gold": 72820000,
+      "troops": 7485547,
+      "landSize": 1332000
+    },
+    {
+      "id": 2,
+      "gold": 98575000,
+      "troops": 8974144,
+      "landSize": 1317219
+    }
+  ],
+  "stateHash": 3264438037,
+  "arrayBufferMiB": 286.4452066421509,
+  "note": "Synthetic deterministic scenario, not a multiplayer capacity certification."
+}

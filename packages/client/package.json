@@ -1,0 +1,10 @@
+{
+  "name": "@district/rts-client",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@district/rts-shared": "0.1.0",
+    "@district/rts-engine": "0.1.0"
+  }
+}
